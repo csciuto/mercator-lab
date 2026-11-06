@@ -1,8 +1,8 @@
-# __TITLE__
+# Rhumb & Great Circle Plotter
 
-**Live:** [corey.sciu.to/__NAME__](https://corey.sciu.to/__NAME__/)
+**Live:** [corey.sciu.to/rhumb-great-circle](https://corey.sciu.to/rhumb-great-circle/)
 
-__DESCRIPTION__
+Draw great-circle and rhumb-line routes on a Mercator world map and compare their distances.
 
 ## Development
 
