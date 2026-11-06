@@ -304,19 +304,19 @@ function syncMeasSprites() {
   });
 }
 let measId = 1;
-function addMeasPoint(c) {
+let pendingName = "";
+function addMeasPoint(c, name = "") {
   hideRoutes(false);
-  if (!S.pendingMeas) S.pendingMeas = c;
+  if (!S.pendingMeas) { S.pendingMeas = c; pendingName = name; }
   else {
-    if (gcDist(S.pendingMeas, c) > 0.5) S.meas.push({ id: measId++, type: S.measType, a: S.pendingMeas, b: c });
+    if (gcDist(S.pendingMeas, c) > 0.5) S.meas.push({ id: measId++, type: S.measType, a: S.pendingMeas, b: c, an: pendingName, bn: name });
     S.pendingMeas = null;
   }
   S.measVer++; renderMeasList(); dirty = true;
 }
 function renderMeasList() {
   const h = linesHash(S.meas);
-  history.replaceState(null, "", h);
-  $("to-other").href = "../" + h;
+  history.replaceState(null, "", h || location.pathname);
   const ul = $("measList"); ul.innerHTML = "";
   if (S.routesHidden && S.meas.length) {
     const li = document.createElement("li"); li.style.display = "block"; li.style.border = "0"; li.className = "prose";
@@ -328,7 +328,7 @@ function renderMeasList() {
     li.className = m.type;
     li.innerHTML = `<span class="mbar"></span><div class="meta"><b>${m.type === "gc" ? "Great circle" : "Rhumb line"}</b><br>${fmtNum(km * KM_MI, km)} mi · ${fmtNum(km, km)} km · ${fmtNum(km * KM_NM, km)} nmi<br><span class="c"></span>${extraLabel(S.meas, m) ? '<br><span class="extra"></span>' : ""}</div><button class="x" aria-label="Remove line">×</button>`;
     if (li.querySelector(".extra")) li.querySelector(".extra").textContent = extraLabel(S.meas, m);
-    li.querySelector(".c").textContent = `${cityAt(m.a) || fmtLL(m.a)} → ${cityAt(m.b) || fmtLL(m.b)} · ${m.type === "gc" ? "initial course" : "constant course"} ${lineBearing(m).toFixed(1)}°`;
+    li.querySelector(".c").textContent = `${m.an || cityAt(m.a) || fmtLL(m.a)} → ${m.bn || cityAt(m.b) || fmtLL(m.b)} · ${m.type === "gc" ? "initial course" : "constant course"} ${lineBearing(m).toFixed(1)}°`;
     li.querySelector(".x").onclick = () => { S.meas = S.meas.filter(x => x !== m); S.measVer++; renderMeasList(); dirty = true; };
     ul.append(li);
   }
@@ -541,7 +541,19 @@ function tween(ms, f, channel = "orient") {
 }
 function setStage(t) {
   S.stageTarget = t; const from = S.stage;
+  $("side").classList.toggle("unrolled", t === 2);
+  if (t === 2) faceSheet(); else if (from > 1.5) resetView();
   return tween(900 * Math.max(0.4, Math.abs(t - from)), k => { S.stage = from + (t - from) * k; }, "stage");
+}
+// unrolled, the bench becomes the wall map: look at the sheet straight on, map north up
+function faceSheet() {
+  const n = toThree(mv(S.C, [1, 0, 0])), up = toThree(mv(S.C, [0, 0, 1]));
+  const half = Math.tan(rad(camera.fov / 2));
+  const fit = 1 + 1.08 * Math.max(MAXH / half, Math.PI / (half * camera.aspect));
+  const from = { ...cam }, u0 = camera.up.clone(), u1 = new THREE.Vector3(...up);
+  const to = { yaw: Math.atan2(n[0], n[2]), pitch: Math.asin(Math.max(-1, Math.min(1, n[1]))), dist: Math.min(24, fit) };
+  let dy = to.yaw - from.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+  tween(900, k => { const e = ease(k); cam.yaw = from.yaw + dy * e; cam.pitch = from.pitch + (to.pitch - from.pitch) * e; cam.dist = from.dist + (to.dist - from.dist) * e; camera.up.copy(u0).lerp(u1, e).normalize(); placeCamera(); }, "camera");
 }
 // Move a country: turn the globe so the country's centre lands on target t (cylinder lon/lat), north kept up
 async function moveCountryTo(t) {
@@ -587,9 +599,10 @@ async function animateTo(Gt, Ct, ms = 1000) {
 }
 
 // ---------------- input ----------------
-const HINT = "Drag: turn the globe or cylinder · Shift-drag: both · Drag empty space or right-drag: look around · Click the globe: add a point";
+const HINT = "Drag: turn the globe or cylinder · Shift-drag: both · Right-drag: look around · Click the globe or map: add a point";
 const HOVER_HINT = {
   globe: "Drag: turn the globe · Click: add a point · Shift-drag: turn both",
+  sheet: "Drag: turn the globe · Click: add a point",
   cyl: "Drag: turn the cylinder · Shift-drag: turn both",
   view: "Drag: look around",
 };
@@ -597,15 +610,15 @@ let hoverTarget = null;
 $("dragHint").textContent = HINT;
 const CAM0 = { ...cam };
 function resetView() {
-  const from = { ...cam };
+  const from = { ...cam }, u0 = camera.up.clone(), u1 = new THREE.Vector3(0, 1, 0);
   let dy = CAM0.yaw - from.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-  tween(600, k => { const e = ease(k); cam.yaw = from.yaw + dy * e; cam.pitch = from.pitch + (CAM0.pitch - from.pitch) * e; cam.dist = from.dist + (CAM0.dist - from.dist) * e; placeCamera(); }, "camera");
+  tween(600, k => { const e = ease(k); cam.yaw = from.yaw + dy * e; cam.pitch = from.pitch + (CAM0.pitch - from.pitch) * e; cam.dist = from.dist + (CAM0.dist - from.dist) * e; camera.up.copy(u0).lerp(u1, e).normalize(); placeCamera(); }, "camera");
 }
-$("resetView").onclick = resetView;
+$("resetView").onclick = () => S.stageTarget === 2 ? faceSheet() : resetView();
 
 const cv = renderer.domElement;
 cv.addEventListener("contextmenu", e => e.preventDefault());
-cv.addEventListener("dblclick", e => { if (hitTest(e.clientX, e.clientY).target === "view") resetView(); });
+cv.addEventListener("dblclick", e => { if (hitTest(e.clientX, e.clientY).target === "view") $("resetView").click(); });
 let drag = null;
 const pointers = new Map();
 let pinch = null;
@@ -615,10 +628,26 @@ function hitTest(x, y) {
   const r = cv.getBoundingClientRect();
   ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
   scene.updateMatrixWorld(); ray.setFromCamera(ndc, camera);
+  if (S.stage > 1.5) { // unrolled: the wall map is in front
+    const t = sheetHit(ray.ray);
+    if (t) return { target: "sheet", t };
+  }
   const hg = ray.intersectObject(globeMesh, false)[0];
   if (hg) return { target: "globe", point: hg.point };
   if (S.stage < 1.02) { const hc = ray.intersectObject(cylSurface, false)[0]; if (hc) return { target: "cyl" }; }
   return { target: "view" };
+}
+// where a ray meets the unrolled sheet (the plane x = 1 in the cylinder's frame), as cylinder lon/lat
+function sheetHit(r) {
+  const Ci = mT(S.C);
+  const o = mv(Ci, fromThree([r.origin.x, r.origin.y, r.origin.z])), d = mv(Ci, fromThree([r.direction.x, r.direction.y, r.direction.z]));
+  if (Math.abs(d[0]) < 1e-9) return null;
+  const k = (1 - o[0]) / d[0]; if (k <= 0) return null;
+  const th = o[1] + d[1] * k, h = o[2] + d[2] * k;
+  if (Math.abs(th) > Math.PI || Math.abs(h) > MAXH) return null;
+  const lat = deg(cylLat(S.mode, h));
+  if (Math.abs(lat) > Math.min(85, latMax(S.mode))) return null;
+  return [deg(th), lat];
 }
 function setHover(t) {
   if (t === hoverTarget) return;
@@ -657,7 +686,7 @@ cv.addEventListener("pointermove", e => {
   const e2 = camera.matrixWorld.elements;
   const right = fromThree([e2[0], e2[1], e2[2]]), up = fromThree([e2[4], e2[5], e2[6]]);
   const R = mmul(axisAngle(up, dx * 0.008), axisAngle(right, dy * 0.008));
-  if (drag.target === "globe" || drag.target === "both") S.G = orthonormalize(mmul(R, S.G));
+  if (drag.target === "globe" || drag.target === "sheet" || drag.target === "both") S.G = orthonormalize(mmul(R, S.G));
   if (drag.target === "cyl" || drag.target === "both") S.C = orthonormalize(mmul(R, S.C));
   if (drag.target !== "both") S.lastMove = null;
   dirty = true;
@@ -668,6 +697,7 @@ cv.addEventListener("pointerup", e => {
     const p = drag.hit.point, geoW = fromThree([p.x, p.y, p.z]);
     addMeasPoint(lonlat(mv(mT(S.G), geoW)));
   }
+  if (drag && !drag.moved && drag.button === 0 && drag.hit.target === "sheet") sheetClick(drag.hit.t);
   if (drag && drag.target !== "view") cv.style.cursor = "grab";
 });
 cv.addEventListener("pointerleave", () => { if (!drag) setHover(null); });
@@ -696,7 +726,7 @@ $("mUndo").onclick = () => { S.meas.pop(); S.measVer++; renderMeasList(); dirty 
 $("mClear").onclick = () => { S.meas = []; S.pendingMeas = null; S.measVer++; renderMeasList(); dirty = true; };
 $("mPair").onclick = () => {
   const key = m => `${m.a}|${m.b}`, have = new Set(S.meas.map(m => m.type + key(m)));
-  S.meas.slice().forEach(m => { const o = m.type === "gc" ? "rh" : "gc"; if (!have.has(o + key(m))) { S.meas.push({ id: measId++, type: o, a: m.a.slice(), b: m.b.slice() }); have.add(o + key(m)); } });
+  S.meas.slice().forEach(m => { const o = m.type === "gc" ? "rh" : "gc"; if (!have.has(o + key(m))) { S.meas.push({ id: measId++, type: o, a: m.a.slice(), b: m.b.slice(), an: m.an, bn: m.bn }); have.add(o + key(m)); } });
   S.measVer++; renderMeasList(); dirty = true;
 };
 window.addEventListener("keydown", e => {
@@ -719,12 +749,47 @@ function flatToCyl(e) {
 }
 flat.addEventListener("pointermove", e => { flat.style.cursor = "crosshair"; if (!S.armed) return; const p = flatToCyl(e); hoverFlat = [p.x, p.y]; dirty = true; });
 flat.addEventListener("pointerleave", () => { hoverFlat = null; dirty = true; });
-flat.addEventListener("click", e => {
-  const p = flatToCyl(e); if (!p.ok) return;
-  if (!S.armed) { addMeasPoint(lonlat(mv(mT(M()), vec(...p.t)))); return; }
+// a click on the wall map (side panel or unrolled sheet), at cylinder lon/lat t
+function sheetClick(t) {
+  if (!S.armed) { addMeasPoint(lonlat(mv(mT(M()), vec(...t)))); return; }
   S.armed = false; flat.classList.remove("armed"); $("move").textContent = "Move country…"; hoverFlat = null;
-  moveCountryTo(p.t);
+  moveCountryTo(t);
+}
+flat.addEventListener("click", e => { const p = flatToCyl(e); if (p.ok) sheetClick(p.t); });
+
+// ---------------- search: a city or typed coordinates ----------------
+const q = $("q"), qList = $("q-results");
+let qItems = [], qSel = 0;
+function showResults() {
+  const c = parseCoord(q.value);
+  qItems = (c ? [{ c, label: fmtLL(c), where: "" }] : [])
+    .concat(searchPlaces(PLACES, q.value, 8).map(([name, where, lat, lon]) => ({ c: [lon, lat], name, label: name, where })));
+  qSel = 0; qList.innerHTML = "";
+  qItems.forEach((it, i) => {
+    const li = document.createElement("li");
+    li.setAttribute("role", "option"); li.setAttribute("aria-selected", i === qSel);
+    li.innerHTML = '<span class="n"></span><span class="w"></span>';
+    li.firstChild.textContent = it.label; li.lastChild.textContent = it.where;
+    li.addEventListener("mousedown", e => { e.preventDefault(); choose(i); });
+    qList.append(li);
+  });
+  qList.hidden = !qItems.length;
+}
+function choose(i) {
+  const it = qItems[i]; if (!it) return;
+  q.value = ""; qList.hidden = true; qItems = [];
+  addMeasPoint(it.c, it.name || "");
+}
+q.addEventListener("input", showResults);
+q.addEventListener("keydown", e => {
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    qSel = (qSel + (e.key === "ArrowDown" ? 1 : -1) + qItems.length) % Math.max(1, qItems.length);
+    [...qList.children].forEach((li, k) => li.setAttribute("aria-selected", k === qSel));
+  } else if (e.key === "Enter") { e.preventDefault(); choose(qSel); }
+  else if (e.key === "Escape") { q.value = ""; qList.hidden = true; }
 });
+q.addEventListener("blur", () => { qList.hidden = true; });
 
 // the guided demo
 $("demo").onclick = async () => {
@@ -758,7 +823,7 @@ function frame() {
 }
 setCountry("United States of America");
 // example: the same two cities both ways
-const fromUrl = linesFromHash(location.hash);  // routes handed over from the Routes view, or a shared link
+const fromUrl = linesFromHash(location.hash);  // a shared or bookmarked link
 if (fromUrl) fromUrl.forEach(L => S.meas.push({ id: measId++, type: L.type, a: L.a, b: L.b }));
 else S.meas.push({ id: measId++, type: "gc", a: [-71.06, 42.36], b: [37.62, 55.76] }, { id: measId++, type: "rh", a: [-71.06, 42.36], b: [37.62, 55.76] });
 S.measVer++; renderMeasList();

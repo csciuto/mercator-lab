@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Help · Mercator Lab</title>
-  <meta name="description" content="How to use Mercator Lab: drawing routes, and unrolling the globe.">
+  <meta name="description" content="How to use Mercator Lab: routes, and unrolling a globe into a wall map.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
   <style>
@@ -44,33 +44,36 @@
     <p>A <span class="gc">great circle</span> is the shortest way between two points; its compass course keeps
       changing. A <span class="rh">rhumb line</span> keeps one compass course the whole way, so it's a straight line on
       a Mercator map, and longer.</p>
-    <img src="preview.png" alt="Routes: Boston to Moscow drawn both ways on a Mercator map, and London to Sydney as a great circle." width="1200" height="630" loading="lazy">
     <ul>
-      <li>Click two points, or search a city or coordinates (<kbd>42.36, -71.06</kbd>, <kbd>42.36N 71.06W</kbd>).</li>
+      <li>Search a city or coordinates (<kbd>42.36, -71.06</kbd>, <kbd>42.36N 71.06W</kbd>), or click the globe or
+        the wall map. Two points make a route.</li>
       <li><b>Compare both types</b> adds the missing partner for each route; the rhumb line then shows how much
         longer it is.</li>
-      <li>Drag an endpoint to move it. Scroll or pinch to zoom; drag to pan.</li>
       <li><kbd>G</kbd>/<kbd>R</kbd> line type · <kbd>Esc</kbd> cancel · <kbd>⌫</kbd> remove last.</li>
+      <li>Routes ride on the globe, so they follow it through every projection and onto the wall map. They hide
+        while a country is moved.</li>
       <li>The address keeps your routes, so you can bookmark or share them.</li>
     </ul>
   </section>
 
   <section id="unroll">
-    <h2>Unroll the globe</h2>
+    <h2>Globe, cylinder, wall map</h2>
     <p>A Mercator map is a globe wrapped in a cylinder and unrolled. Step through it with <b>On globe</b>,
-      <b>Project</b> and <b>Unroll</b>.</p>
-    <img src="help-unroll.png" alt="Unroll the globe: a globe inside a cylinder, with the unrolled map beside it." width="1200" height="740" loading="lazy">
+      <b>Project</b> and <b>Unroll</b>. At <b>Unroll</b> the cylinder lies flat as the wall map; before that, the
+      wall map shows in the side panel.</p>
+    <img src="help-unroll.png" alt="A globe inside a cylinder, with routes from Boston to Moscow and the wall map beside it." width="1200" height="740" loading="lazy">
     <ul>
-      <li>The flat map depends only on how the globe sits inside the cylinder. Turn both together and nothing
-        changes.</li>
+      <li>Drag the globe or the cylinder to turn it; Shift-drag turns both; right-drag looks around. Scroll or
+        pinch to zoom.</li>
+      <li>The wall map depends only on how the globe sits inside the cylinder. Turn both together and nothing
+        changes. Tilt the cylinder for transverse or polar Mercator.</li>
       <li><b>Projection</b> swaps in other cylinders. Mercator isn't a light shining through the globe; the other
         two are.</li>
+      <li><b>Globe</b> sets how see-through the globe is.</li>
       <li><b>Freeze as copy A</b> keeps the current map printed on the cylinder; it turns with the cylinder.</li>
       <li><b>Move country</b> keeps the cylinder still and turns the globe, the way size-comparison maps do. A
         country moved north lands where the cylinder stretches more, and its old latitude lines no longer match
         the cylinder's rings. That's where the bent borders come from.</li>
-      <li>Your routes come along from Routes and back. They ride on the globe, so they hide while a country is
-        moved.</li>
     </ul>
   </section>
 </main>

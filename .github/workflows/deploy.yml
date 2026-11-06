@@ -51,7 +51,7 @@ jobs:
       - name: Stamp version
         run: |
           VERSION="v1.$(git rev-list --count HEAD)"
-          for f in index.html unroll/index.html help.html; do
+          for f in index.html help.html; do
             sed -i "s|title=\"Version\">dev<|title=\"Version\">$VERSION<|" "$f"
             grep -q ">$VERSION<" "$f"
           done

@@ -4,195 +4,281 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Mercator Lab</title>
-  <meta name="description" content="Draw great-circle and rhumb-line routes on a Mercator map, and watch a globe unroll into one.">
+  <meta name="description" content="Turn a globe inside a cylinder, unroll it into a wall map, and draw great-circle and rhumb-line routes between cities.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://corey.sciu.to/mercator-lab/">
   <meta property="og:title" content="Mercator Lab">
-  <meta property="og:description" content="Draw great-circle and rhumb-line routes on a Mercator map, and watch a globe unroll into one.">
+  <meta property="og:description" content="Turn a globe inside a cylinder, unroll it into a wall map, and draw great-circle and rhumb-line routes between cities.">
   <meta property="og:image" content="https://corey.sciu.to/mercator-lab/preview.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
 /* Base reset */
 :root { box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
-body { margin: 0; font: 14px -apple-system, BlinkMacSystemFont, sans-serif; }
+body { margin: 0; }
 [hidden] { display: none !important; }
 
-/* Layout: full-bleed Mercator chart that wraps east-west; a chart-table panel floats, docks left/right, or shrinks to its header */
+/* Layout: one dark drafting-room screen. 3D bench on the left (globe → cylinder → wall map), routes and controls on the right.
+   Color is meaning: amber = Earth's own grid, cyan = the cylinder's grid, coral = live projection (B), lavender = frozen copy (A). */
 :root {
-  --sea: #dfe8ec;
-  --land: #f4f2ea;
-  --border: #b9b5a6;
-  --grid: #c3d2d9;
-  --ink: #1d2a33;
-  --muted: #5d6d77;
-  --city: #4a5963;
-  --panel: rgba(250,251,250,.95);
-  --panel-solid: #f7f9f9;
-  --panel-line: #cdd6da;
-  --gc: #b2341f;
-  --rh: #1f5fa8;
-  --halo: #f7f8f6;
+  color-scheme: dark;
+  --bg: #0c1317;
+  --panel: #111b20;
+  --panel-2: #16232a;
+  --line: #24363f;
+  --ink: #e1e9ec;
+  --muted: #8a9ca4;
+  --earth: #f0b440;
+  --cyl: #4fd3c4;
+  --seam: #e86fb0;
+  --b: #ff7a59;
+  --a: #9aa6ee;
+  --land: #d9cfb4;
+  --gcl: #f6f0de;
+  --rhl: #8fdc6e;
   --f-display: "Spectral", Georgia, serif;
   --f-body: "IBM Plex Sans", system-ui, sans-serif;
   --f-data: "IBM Plex Mono", ui-monospace, Menlo, monospace;
 }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --sea: #0f1c24; --land: #23302f; --border: #3f4e4c; --grid: #1d3340; --ink: #e3eaec; --muted: #8fa1aa; --city: #a7b6bd;
-  --panel: rgba(18,28,34,.95); --panel-solid: #121c22; --panel-line: #2c3e48; --gc: #f0775c; --rh: #6aa9f0; --halo: #0f1c24; color-scheme: dark } }
-:root[data-theme="dark"] {
-  --sea: #0f1c24; --land: #23302f; --border: #3f4e4c; --grid: #1d3340; --ink: #e3eaec; --muted: #8fa1aa; --city: #a7b6bd;
-  --panel: rgba(18,28,34,.95); --panel-solid: #121c22; --panel-line: #2c3e48; --gc: #f0775c; --rh: #6aa9f0; --halo: #0f1c24; color-scheme: dark }
-
 html, body { height: 100%; }
-body { background: var(--sea); color: var(--ink); font-family: var(--f-body); overflow: hidden; }
-#wrap { position: relative; height: 100%; display: flex; }
-#mapbox { position: relative; flex: 1; min-width: 0; height: 100%; }
-svg#map { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
-.sphere { fill: var(--sea); }
-.grat { fill: none; stroke: var(--grid); stroke-width: .7; }
-.land { fill: var(--land); stroke: var(--border); stroke-width: .5; }
-.borders { fill: none; stroke: var(--border); stroke-width: .5; }
-.line { fill: none; stroke-width: 2.2; stroke-linecap: round; }
-.line.gc { stroke: var(--gc); }
-.line.rh { stroke: var(--rh); stroke-dasharray: 7 4; }
-.line.preview { opacity: .55; }
-.line.hot { stroke-width: 3.6; }
-.pt { stroke: var(--halo); stroke-width: 2; cursor: grab; }
-.pt.gc { fill: var(--gc); } .pt.rh { fill: var(--rh); }
-.pt:active { cursor: grabbing; }
-.lbl { font: 600 11.5px var(--f-data); paint-order: stroke; stroke: var(--halo); stroke-width: 3.5px; stroke-linejoin: round; pointer-events: none; font-variant-numeric: tabular-nums; }
-.lbl.gc { fill: var(--gc); } .lbl.rh { fill: var(--rh); }
-.city circle { fill: var(--city); }
-.city text { font: 500 10.5px var(--f-body); fill: var(--city); paint-order: stroke; stroke: var(--sea); stroke-width: 3px; stroke-linejoin: round; }
-.city.t1 text { font-weight: 600; font-size: 11px; }
-.city { pointer-events: none; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 13px; overflow: hidden; }
+#app { height: 100%; display: grid; grid-template-rows: auto 1fr; }
 
-/* panel */
-#panel {
-  position: absolute; z-index: 2; top: 16px; left: 16px; width: 320px; max-height: calc(100% - 32px);
-  display: flex; flex-direction: column;
-  background: var(--panel); border: 1px solid var(--panel-line); border-radius: 6px;
-  backdrop-filter: blur(6px); box-shadow: 0 6px 24px rgba(0,0,0,.12);
-}
-#panel.docked { position: relative; top: auto; left: auto; height: 100%; max-height: none; border-radius: 0; box-shadow: none; backdrop-filter: none; background: var(--panel-solid); flex: 0 0 320px; }
-#panel.docked.left { order: -1; border-width: 0 1px 0 0; }
-#panel.docked.right { order: 2; border-width: 0 0 0 1px; }
-#panel.min .body { display: none; }
-#panel.min.docked { height: auto; align-self: flex-start; border-width: 0 1px 1px 1px; }
-.head { display: flex; align-items: center; gap: 6px; padding: 10px 10px 10px 14px; cursor: move; user-select: none; touch-action: none; }
-#panel.docked .head { cursor: default; }
-.head h1 { margin: 0; flex: 1; min-width: 0; font: 700 16px/1.15 var(--f-display); letter-spacing: .01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tools { display: flex; gap: 2px; }
-.tool { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; padding: 0; }
-.tool:hover { color: var(--ink); border-color: var(--panel-line); }
-.tool[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); }
-.tool svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.6; }
-.modebar { padding: 0 14px 12px; }
-.views { display: flex; gap: 4px; padding: 0 14px 10px; font: 500 12.5px var(--f-body); }
-.views a { padding: 4px 9px; border-radius: 4px; color: var(--muted); text-decoration: none; border: 1px solid transparent; }
-.views a:hover { color: var(--ink); border-color: var(--panel-line); }
-.views a[aria-current="page"] { color: var(--ink); border-color: var(--ink); }
-.body { display: flex; flex-direction: column; gap: 12px; padding: 0 14px 14px; min-height: 0; flex: 1; }
-.sub { margin: -4px 0 0; font-size: 12px; color: var(--muted); }
-.seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--panel-line); border-radius: 5px; overflow: hidden; }
-.seg button { font: 500 13px var(--f-body); padding: 7px 6px; border: 0; background: transparent; color: var(--ink); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; }
-.seg button + button { border-left: 1px solid var(--panel-line); }
-.seg button[aria-pressed="true"] { background: var(--ink); color: var(--halo); }
-.swatch { width: 18px; height: 0; border-top: 3px solid; }
-.swatch.gc { border-color: var(--gc); } .swatch.rh { border-color: var(--rh); border-top-style: dashed; }
-.hint { font-size: 12px; color: var(--muted); line-height: 1.45; margin: 0; }
-.hint kbd { font: 500 11px var(--f-data); border: 1px solid var(--panel-line); border-radius: 3px; padding: 0 4px; }
-.cap { font: 600 10.5px var(--f-body); text-transform: uppercase; letter-spacing: .09em; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
-#list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; min-height: 0; }
-#list li { display: grid; grid-template-columns: 4px 1fr auto; gap: 9px; padding: 7px 6px 7px 0; border-bottom: 1px solid var(--panel-line); font-size: 12px; }
-#list li .bar { border-radius: 2px; }
-#list li.gc .bar { background: var(--gc); } #list li.rh .bar { background: var(--rh); }
-#list .meta { min-width: 0; font-family: var(--f-data); font-variant-numeric: tabular-nums; line-height: 1.5; }
-#list .meta b { font-family: var(--f-body); font-weight: 600; }
-#list .meta .c { color: var(--muted); font-size: 11px; }
-.x { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 4px; align-self: start; }
-.x:hover { color: var(--gc); }
+.bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.bar h1 { margin: 0 8px 0 0; font: 700 18px/1 var(--f-display); letter-spacing: .01em; }
+.grp { display: flex; align-items: center; gap: 6px; }
+.lbl { font: 600 10.5px var(--f-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.seg button { font: 500 12.5px var(--f-body); padding: 6px 10px; border: 0; background: transparent; color: var(--ink); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.btn { font: 500 12.5px var(--f-body); padding: 6px 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel-2); color: var(--ink); cursor: pointer; }
+.btn:hover:not(:disabled) { border-color: var(--muted); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn.primary { background: var(--b); border-color: var(--b); color: #1a0d08; font-weight: 600; }
+.btn.a { border-color: var(--a); color: var(--a); }
+.btn.cyl { border-color: var(--cyl); color: var(--cyl); }
+.spacer { flex: 1; }
+a.btn { text-decoration: none; }
 .search { position: relative; }
-#q { width: 100%; box-sizing: border-box; font: 13px var(--f-body); padding: 7px 9px; border: 1px solid var(--panel-line); border-radius: 5px; background: var(--panel-solid); color: var(--ink); }
-#q:focus { outline: 2px solid var(--rh); outline-offset: 1px; }
-#q-results { position: absolute; z-index: 3; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: 4px; list-style: none; background: var(--panel-solid); border: 1px solid var(--panel-line); border-radius: 5px; box-shadow: 0 6px 18px rgba(0,0,0,.15); max-height: 260px; overflow-y: auto; }
+#q { width: 100%; box-sizing: border-box; font: 13px var(--f-body); padding: 7px 9px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel-2); color: var(--ink); }
+#q-results { position: absolute; z-index: 3; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: 4px; list-style: none; background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; box-shadow: 0 6px 18px rgba(0,0,0,.4); max-height: 260px; overflow-y: auto; }
 #q-results li { padding: 5px 7px; border-radius: 3px; cursor: pointer; font-size: 12.5px; display: flex; justify-content: space-between; gap: 10px; }
 #q-results li .w { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
-#q-results li[aria-selected="true"], #q-results li:hover { background: var(--grid); }
-#list .meta .extra { color: var(--rh); font-size: 11px; }
-.credit { font-size: 10.5px; color: var(--muted); margin: 0; }
-.credit a { color: inherit; }
-.empty { font-size: 12px; color: var(--muted); padding: 4px 0; }
-.btns { display: flex; gap: 8px; flex-wrap: wrap; }
-.btn { font: 500 12px var(--f-body); padding: 6px 10px; border: 1px solid var(--panel-line); border-radius: 4px; background: transparent; color: var(--ink); cursor: pointer; }
-.btn:hover { border-color: var(--ink); }
-.chk { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
-button:focus-visible { outline: 2px solid var(--rh); outline-offset: 2px; }
-#status { position: absolute; right: 16px; bottom: 16px; font: 500 11px var(--f-data); color: var(--muted); background: var(--panel); border: 1px solid var(--panel-line); padding: 4px 8px; border-radius: 4px; pointer-events: none; font-variant-numeric: tabular-nums; }
+#q-results li[aria-selected="true"], #q-results li:hover { background: var(--line); }
+#side.unrolled .flatwrap canvas, #side.unrolled .flathead { display: none; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--cyl); outline-offset: 2px; }
 
-@media (max-width: 640px) {
-  #panel, #panel.docked { position: absolute; top: auto !important; bottom: 16px; left: 16px !important; right: 16px; width: auto; height: auto; max-height: 50%; border-radius: 6px; border-width: 1px; order: 0; }
-  .dockbtn { display: none !important; }
-  .head { cursor: default; }
-  #status { top: 16px; bottom: auto; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 440px; min-height: 0; }
+#bench { position: relative; min-width: 0; min-height: 0; }
+#bench canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.overlay { position: absolute; left: 16px; top: 14px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; max-width: calc(100% - 32px); }
+.overlay > * { pointer-events: auto; }
+.hint { color: var(--muted); font-size: 12px; line-height: 1.45; max-width: 46ch; }
+.legend { position: absolute; left: 16px; bottom: 14px; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); pointer-events: none; max-width: calc(100% - 32px); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 16px; height: 0; border-top: 2px solid; }
+.sw.earth { border-color: var(--earth); } .sw.cyl { border-color: var(--cyl); } .sw.seam { border-color: var(--seam); border-top-style: dashed; }
+.sw.b { border-color: var(--b); } .sw.a { border-color: var(--a); }
+.sw.gcl { border-color: var(--gcl); } .sw.rhl { border-color: var(--rhl); border-top-style: dashed; }
+.inl { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.inl input[type=range] { width: 96px; accent-color: var(--land); }
+.inl output { font: 12px var(--f-data); color: var(--ink); min-width: 4ch; }
+kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; color: var(--ink); }
+#measList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+#measList li { display: grid; grid-template-columns: 4px 1fr auto; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+#measList .mbar { border-radius: 2px; } #measList li.gc .mbar { background: var(--gcl); } #measList li.rh .mbar { background: var(--rhl); }
+#measList .meta { min-width: 0; font: 12px/1.5 var(--f-data); font-variant-numeric: tabular-nums; }
+#measList .meta b { font-family: var(--f-body); font-weight: 600; }
+#measList .meta .c { color: var(--muted); font-size: 11px; }
+#measList .meta .extra { color: var(--rhl); font-size: 11px; }
+#measList .x { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 4px; align-self: start; }
+#measList .x:hover { color: var(--b); }
+.seg .sw { display: inline-block; margin-right: 6px; vertical-align: middle; }
+#note { position: absolute; right: 16px; top: 14px; max-width: 34ch; font-size: 12px; line-height: 1.45; color: var(--ink); background: rgba(17,27,32,.88); border: 1px solid var(--line); border-radius: 6px; padding: 9px 11px; }
+#note b { color: var(--b); font-weight: 600; }
+
+#side { min-height: 0; overflow-y: auto; border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; }
+.flatwrap { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; background: var(--panel); }
+.flathead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.flathead h2 { margin: 0; font: 600 14px var(--f-display); }
+#flat { display: block; width: 100%; aspect-ratio: 1 / 1; max-width: 100%; border: 1px solid var(--line); border-radius: 4px; background: #0a1014; cursor: default; }
+#flat.armed { cursor: crosshair; border-color: var(--b); }
+.readout { margin-top: 8px; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font: 12px var(--f-data); color: var(--muted); font-variant-numeric: tabular-nums; }
+.readout b { color: var(--ink); font-weight: 500; }
+
+.sec { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.sec h3 { margin: 0; font: 600 10.5px var(--f-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.sec h3 .dot { width: 8px; height: 8px; border-radius: 50%; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.slider { display: grid; grid-template-columns: 74px 1fr 58px; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.slider input[type=range] { width: 100%; accent-color: var(--ink); }
+.slider output { font: 12px var(--f-data); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+#globeSec input[type=range] { accent-color: var(--earth); }
+#cylSec input[type=range] { accent-color: var(--cyl); }
+.field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 160px; }
+.field input, .field select { font: 13px var(--f-body); padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel-2); color: var(--ink); }
+.chk { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink); }
+.prose { margin: 0; color: var(--muted); line-height: 1.5; font-size: 12.5px; max-width: 60ch; }
+.prose b { color: var(--ink); font-weight: 600; }
+.prose a { color: var(--ink); }
+.foot { margin-top: auto; border-bottom: 0; }
+
+@media (max-width: 900px) {
+  body { overflow: auto; }
+  #app { height: auto; min-height: 100%; }
+  main { grid-template-columns: 1fr; }
+  #bench { height: 62vh; min-height: 360px; }
+  #side { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+  .flatwrap { position: static; }
+  #note { display: none; }
 }
+@media (max-width: 520px) {
+  .bar { padding: 10px 16px; }
+  .bar h1 { width: 100%; }
+  .legend { display: none; }
+  .overlay .lbl, .overlay .hint { display: none; }
+  .overlay .grp { flex-wrap: wrap; }
+  .overlay .seg button, .overlay .btn { padding: 6px 8px; font-size: 12px; white-space: nowrap; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
-<div id="wrap">
-  <main id="mapbox">
-    <svg id="map" role="img" aria-label="Mercator world map with drawn lines"></svg>
-    <div id="status" aria-live="off">—</div>
+<div id="app">
+  <header class="bar">
+    <h1>Mercator Lab</h1>
+    <div class="grp" role="group" aria-label="Stage">
+      <span class="seg">
+        <button id="st0" aria-pressed="true">On globe</button>
+        <button id="st1" aria-pressed="false">Project</button>
+        <button id="st2" aria-pressed="false">Unroll</button>
+      </span>
+    </div>
+    <div class="grp">
+      <label class="lbl" for="mode">Projection</label>
+      <div class="field" style="min-width:0;flex:none">
+        <select id="mode">
+          <option value="merc">Mercator</option>
+          <option value="central">Light from the center</option>
+          <option value="lambert">Rays out from the axis</option>
+        </select>
+      </div>
+    </div>
+    <div class="grp">
+      <button class="btn a" id="freeze" title="Keep this projection on the cylinder as copy A">Freeze as copy A</button>
+      <button class="btn" id="clearA" disabled>Clear A</button>
+    </div>
+    <span class="spacer"></span>
+    <button class="btn primary" id="demo" title="Freeze the normal map as A, then move the US over Europe and unroll">Demo: US over Europe</button>
+    <a class="btn" id="help" href="help.html">Help</a>
+  </header>
+
+  <main>
+    <section id="bench" aria-label="3D globe and cylinder">
+      <div class="overlay">
+        <div class="grp" style="flex-wrap:wrap">
+          <button class="btn" id="resetView" title="Starting camera (or double-click)">Reset view</button>
+          <label class="chk"><input type="checkbox" id="print" checked> Live print on cylinder</label>
+          <label class="inl" for="opacity">Globe <input type="range" id="opacity" min="0" max="100" step="1" value="55"><output id="opo">55%</output></label>
+        </div>
+        <div class="hint" id="dragHint"></div>
+      </div>
+      <div id="note"></div>
+      <div class="legend">
+        <span><i class="sw earth"></i>Earth's equator &amp; prime meridian</span>
+        <span><i class="sw cyl"></i>Cylinder's equator, axis &amp; centre line</span>
+        <span><i class="sw seam"></i>Seam (map edge)</span>
+        <span><i class="sw b"></i>Live projection B</span>
+        <span><i class="sw a"></i>Frozen copy A</span>
+        <span><i class="sw gcl"></i>Great circle</span>
+        <span><i class="sw rhl"></i>Rhumb line</span>
+      </div>
+    </section>
+
+    <aside id="side">
+      <div class="flatwrap">
+        <div class="flathead"><h2>Wall map</h2><span class="lbl" id="flatmode">Mercator</span></div>
+        <canvas id="flat" aria-label="Flat map of the cylinder"></canvas>
+        <div class="readout">
+          <span>Map's north pole</span><b id="ro-pole">—</b>
+          <span>Map's centre</span><b id="ro-center">—</b>
+          <span>Globe vs cylinder</span><b id="ro-rel">—</b>
+        </div>
+      </div>
+
+      <div class="sec" id="measSec">
+        <h3><span class="dot" style="background:var(--gcl)"></span>Routes</h3>
+        <span class="seg" role="group" aria-label="Line type">
+          <button id="mt-gc" aria-pressed="true"><i class="sw gcl"></i>Great circle</button>
+          <button id="mt-rh" aria-pressed="false"><i class="sw rhl"></i>Rhumb line</button>
+        </span>
+        <div class="search">
+          <input id="q" type="search" placeholder="City or lat, lon" autocomplete="off" spellcheck="false" aria-label="Add a point by city or coordinates" aria-controls="q-results" aria-autocomplete="list">
+          <ul id="q-results" role="listbox" aria-label="Matches" hidden></ul>
+        </div>
+        <p class="prose">Search or click two points · <kbd>G</kbd>/<kbd>R</kbd> type · <kbd>Esc</kbd> cancel · <kbd>⌫</kbd> remove last</p>
+        <ul id="measList"></ul>
+        <div class="row">
+          <button class="btn" id="mUndo">Remove last</button>
+          <button class="btn" id="mClear">Clear</button>
+          <button class="btn" id="mPair">Compare both types</button>
+        </div>
+      </div>
+
+      <div class="sec" id="countrySec">
+        <h3><span class="dot" style="background:var(--b)"></span>Country</h3>
+        <div class="row">
+          <div class="field">
+            <input id="country" list="countries" value="United States of America" aria-label="Country to highlight">
+            <datalist id="countries"></datalist>
+          </div>
+        </div>
+        <label class="chk"><input type="checkbox" id="onlyHi"> Live layer B shows only this country</label>
+        <div class="row">
+          <button class="btn" id="move">Move country…</button>
+          <button class="btn cyl" id="bring" disabled>Bring the cylinder along</button>
+        </div>
+        <p class="prose" id="moveText">Click it, then a spot on the wall map.</p>
+      </div>
+
+      <div class="sec" id="globeSec">
+        <h3><span class="dot" style="background:var(--earth)"></span>Globe orientation</h3>
+        <div class="slider"><label for="g0">Spin</label><input type="range" id="g0" min="-180" max="180" step="0.5" value="0"><output id="g0o">0°</output></div>
+        <div class="slider"><label for="g1">Tilt</label><input type="range" id="g1" min="-90" max="90" step="0.5" value="0"><output id="g1o">0°</output></div>
+        <div class="slider"><label for="g2">Roll</label><input type="range" id="g2" min="-180" max="180" step="0.5" value="0"><output id="g2o">0°</output></div>
+      </div>
+
+      <div class="sec" id="cylSec">
+        <h3><span class="dot" style="background:var(--cyl)"></span>Cylinder orientation</h3>
+        <div class="slider"><label for="c0">Spin</label><input type="range" id="c0" min="-180" max="180" step="0.5" value="0"><output id="c0o">0°</output></div>
+        <div class="slider"><label for="c1">Tilt</label><input type="range" id="c1" min="-90" max="90" step="0.5" value="0"><output id="c1o">0°</output></div>
+        <div class="slider"><label for="c2">Roll</label><input type="range" id="c2" min="-180" max="180" step="0.5" value="0"><output id="c2o">0°</output></div>
+        <div class="row">
+          <button class="btn" id="pr-normal">Normal</button>
+          <button class="btn" id="pr-trans">Transverse</button>
+          <button class="btn" id="pr-obl">Oblique 45°</button>
+          <button class="btn" id="pr-reset">Reset both</button>
+        </div>
+      </div>
+
+      <footer class="sec foot">
+        <p class="prose"><a href="help.html">Help</a> · Questions: corey.sciuto+mercator@gmail.com · <a href="https://corey.sciu.to/projects/">More projects</a> · <span class="version" title="Version">dev</span><br>City search: <a href="https://www.geonames.org/">GeoNames</a> (CC BY 4.0)</p>
+      </footer>
+    </aside>
   </main>
-  <aside id="panel" aria-label="Line tools">
-    <div class="head" id="head">
-      <h1>Mercator Lab</h1>
-      <div class="tools">
-        <button class="tool dockbtn" id="dock-left" title="Dock left" aria-label="Dock left" aria-pressed="false"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1"/><line x1="6" y1="2.5" x2="6" y2="13.5"/></svg></button>
-        <button class="tool dockbtn" id="dock-float" title="Float" aria-label="Float" aria-pressed="true"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1"/><rect x="4" y="5" width="6" height="5"/></svg></button>
-        <button class="tool dockbtn" id="dock-right" title="Dock right" aria-label="Dock right" aria-pressed="false"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1"/><line x1="10" y1="2.5" x2="10" y2="13.5"/></svg></button>
-        <button class="tool" id="minimize" title="Collapse" aria-label="Collapse panel" aria-expanded="true"><svg viewBox="0 0 16 16"><polyline id="minico" points="4,10 8,6 12,10"/></svg></button>
-      </div>
-    </div>
-    <nav class="views" aria-label="Views"><a href="./" aria-current="page">Routes</a><a id="to-other" href="unroll/">Unroll the globe</a></nav>
-    <div class="modebar">
-      <div class="seg" role="group" aria-label="Line type">
-        <button id="m-gc" aria-pressed="true"><span class="swatch gc"></span>Great circle</button>
-        <button id="m-rh" aria-pressed="false"><span class="swatch rh"></span>Rhumb line</button>
-      </div>
-    </div>
-    <div class="body">
-      <p class="sub">Mercator · mean Earth radius 6,371.0 km</p>
-      <div class="search">
-        <input id="q" type="search" placeholder="City or lat, lon" autocomplete="off" spellcheck="false" aria-label="Add a point by city or coordinates" aria-controls="q-results" aria-autocomplete="list">
-        <ul id="q-results" role="listbox" hidden></ul>
-      </div>
-      <p class="hint">Click or search two points · Drag an endpoint to move it · <kbd>G</kbd>/<kbd>R</kbd> type · <kbd>Esc</kbd> cancel · <kbd>⌫</kbd> remove last</p>
-      <div class="cap"><span id="count">Lines</span><span>mi · km · nmi</span></div>
-      <ul id="list"></ul>
-      <div class="btns">
-        <button class="btn" id="undo">Remove last</button>
-        <button class="btn" id="clear">Clear all</button>
-        <button class="btn" id="pair">Compare both types</button>
-        <button class="btn" id="reset">Reset view</button>
-      </div>
-      <label class="chk"><input type="checkbox" id="showcities" checked> Show cities</label>
-      <p class="credit"><a href="help.html">Help</a> · Questions: corey.sciuto+mercator@gmail.com · <a href="https://corey.sciu.to/projects/">More projects</a> · <span class="version" title="Version">dev</span><br>City search: <a href="https://www.geonames.org/">GeoNames</a> (CC BY 4.0)</p>
-    </div>
-  </aside>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
 <script src="geo.js"></script>
+<script src="sphere.js"></script>
+<script src="world.js"></script>
 <script src="cities.js"></script>
 <script src="places.js"></script>
-<script src="world.js"></script>
 <script src="lines.js"></script>
-<script src="routes.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

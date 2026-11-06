@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 
-for (const [name, path, ready] of [['Routes', '/', '#map path.land'], ['Unroll the globe', '/unroll/', '#measList li'], ['Help', '/help.html', 'h1']]) {
+for (const [name, path, ready] of [['Mercator Lab', '/', '#measList li'], ['Help', '/help.html', 'h1']]) {
   test(`${name}: no accessibility violations`, async ({ page }) => {
     await page.goto(path);
     await expect(page.locator(ready).first()).toBeVisible();
