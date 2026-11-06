@@ -53,6 +53,7 @@ const S = {
   globeOpacity: 0.55, print: true,
   meas: [], measType: "gc", pendingMeas: null, measVer: 0,
   lastMove: null, armed: false, busy: false,
+  routesHidden: false,            // routes ride on the globe, so they're hidden while a country is moved
 };
 let dirty = true;
 const M = () => mmul(mT(S.C), S.G); // what the map sees: the globe in the cylinder's frame
@@ -269,11 +270,14 @@ function wireSegs(mode) {
 
 // ---------------- measuring lines ----------------
 let MVcache = null, MVver = -1;
+// the routes drawn right now: none while a country is moved (they'd have turned with the globe)
+const shownMeas = () => S.routesHidden ? [] : S.meas;
+function hideRoutes(on) { if (S.routesHidden !== on) { S.routesHidden = on; S.measVer++; renderMeasList(); dirty = true; } }
 function measCoords(m) { return m.type === "gc" ? densify([m.a, m.b], 1) : rhumbPoints(m.a, m.b, 160); }
 function measVecs() {
   if (MVver !== S.measVer) {
     MVcache = { gc: [], rh: [] };
-    for (const m of S.meas) MVcache[m.type === "gc" ? "gc" : "rh"].push(measCoords(m).map(c => vec(c[0], c[1])));
+    for (const m of shownMeas()) MVcache[m.type === "gc" ? "gc" : "rh"].push(measCoords(m).map(c => vec(c[0], c[1])));
     MVver = S.measVer;
   }
   return MVcache;
@@ -291,15 +295,17 @@ function placePoint(v, s) {
   return [gw[0] + (c[0] - gw[0]) * k, gw[1] + (c[1] - gw[1]) * k, gw[2] + (c[2] - gw[2]) * k];
 }
 function syncMeasSprites() {
-  if (measSprites.length === S.meas.length && measSprites.every((sp, i) => sp.userData.key === S.meas[i].id + S.meas[i].type + distLabel(lineDist(S.meas[i])))) return;
+  const ms = shownMeas();
+  if (measSprites.length === ms.length && measSprites.every((sp, i) => sp.userData.key === ms[i].id + ms[i].type + distLabel(lineDist(ms[i])))) return;
   measSprites.forEach(sp => { scene.remove(sp); sp.material.map.dispose(); sp.material.dispose(); });
-  measSprites = S.meas.map(m => {
+  measSprites = ms.map(m => {
     const sp = label(distLabel(lineDist(m)), m.type === "gc" ? css("--gcl") : css("--rhl"), 0.3);
     sp.userData.key = m.id + m.type + distLabel(lineDist(m)); sp.renderOrder = 7; scene.add(sp); return sp;
   });
 }
 let measId = 1;
 function addMeasPoint(c) {
+  hideRoutes(false);
   if (!S.pendingMeas) S.pendingMeas = c;
   else {
     if (gcDist(S.pendingMeas, c) > 0.5) S.meas.push({ id: measId++, type: S.measType, a: S.pendingMeas, b: c });
@@ -312,12 +318,17 @@ function renderMeasList() {
   history.replaceState(null, "", h);
   $("to-other").href = "../" + h;
   const ul = $("measList"); ul.innerHTML = "";
+  if (S.routesHidden && S.meas.length) {
+    const li = document.createElement("li"); li.style.display = "block"; li.style.border = "0"; li.className = "prose";
+    li.textContent = "Hidden while a country is moved. Reset both shows them."; ul.append(li); return;
+  }
   if (!S.meas.length) { const li = document.createElement("li"); li.style.display = "block"; li.style.border = "0"; li.className = "prose"; li.textContent = "No lines yet."; ul.append(li); return; }
   for (const m of S.meas) {
     const km = lineDist(m), li = document.createElement("li");
     li.className = m.type;
-    li.innerHTML = `<span class="mbar"></span><div class="meta"><b>${m.type === "gc" ? "Great circle" : "Rhumb line"}</b><br>${fmtNum(km * KM_MI, km)} mi · ${fmtNum(km, km)} km · ${fmtNum(km * KM_NM, km)} nmi<br><span class="c"></span></div><button class="x" aria-label="Remove line">×</button>`;
-    li.querySelector(".c").textContent = `${fmtLL(m.a)} → ${fmtLL(m.b)} · ${m.type === "gc" ? "initial course" : "constant course"} ${lineBearing(m).toFixed(1)}°`;
+    li.innerHTML = `<span class="mbar"></span><div class="meta"><b>${m.type === "gc" ? "Great circle" : "Rhumb line"}</b><br>${fmtNum(km * KM_MI, km)} mi · ${fmtNum(km, km)} km · ${fmtNum(km * KM_NM, km)} nmi<br><span class="c"></span>${extraLabel(S.meas, m) ? '<br><span class="extra"></span>' : ""}</div><button class="x" aria-label="Remove line">×</button>`;
+    if (li.querySelector(".extra")) li.querySelector(".extra").textContent = extraLabel(S.meas, m);
+    li.querySelector(".c").textContent = `${cityAt(m.a) || fmtLL(m.a)} → ${cityAt(m.b) || fmtLL(m.b)} · ${m.type === "gc" ? "initial course" : "constant course"} ${lineBearing(m).toFixed(1)}°`;
     li.querySelector(".x").onclick = () => { S.meas = S.meas.filter(x => x !== m); S.measVer++; renderMeasList(); dirty = true; };
     ul.append(li);
   }
@@ -372,13 +383,13 @@ function rebuild() {
 
   // measuring endpoints, pending point, distance labels
   const pa = ptsGeo.attributes.position.array; let np = 0;
-  for (const m of S.meas) for (const c of [m.a, m.b]) { const w = placePoint(vec(...c), s); if (w && np < 600) { pa.set(w, np * 3); np++; } }
+  for (const m of shownMeas()) for (const c of [m.a, m.b]) { const w = placePoint(vec(...c), s); if (w && np < 600) { pa.set(w, np * 3); np++; } }
   ptsGeo.attributes.position.needsUpdate = true; ptsGeo.setDrawRange(0, np);
   const pw = S.pendingMeas && placePoint(vec(...S.pendingMeas), s);
   if (pw) { pendGeo.attributes.position.array.set(pw); pendGeo.attributes.position.needsUpdate = true; }
   pendPt.visible = !!pw;
   syncMeasSprites();
-  S.meas.forEach((m, i) => {
+  shownMeas().forEach((m, i) => {
     const sp = measSprites[i], w = placePoint(vec(...lineAt(m, 0.5)), s);
     sp.visible = !!w;
     if (w) { const n = Math.hypot(...w) || 1; sp.position.set(w[0] + w[0] / n * 0.18, w[1] + w[1] / n * 0.18 + 0.08, w[2] + w[2] / n * 0.18); }
@@ -456,7 +467,7 @@ function drawFlat() {
 
   // measuring lines, with distance labels above them
   const proj = flatProj(S.mode, Mr);
-  for (const m of S.meas) {
+  for (const m of shownMeas()) {
     const col = m.type === "gc" ? css("--gcl") : css("--rhl");
     g.beginPath(); pb({ type: "LineString", coordinates: measCoords(m) });
     g.strokeStyle = col; g.lineWidth = 2; g.setLineDash(m.type === "rh" ? [6, 4] : []); g.stroke(); g.setLineDash([]);
@@ -539,6 +550,7 @@ async function moveCountryTo(t) {
   const Mr = M(), q = lonlat(mv(Mr, vec(...HI.centroid)));
   const C0 = S.C, G0 = S.G;
   let dl = t[0] - q[0]; dl = ((dl + 540) % 360) - 180;
+  hideRoutes(true);
   const T1 = moveRotation(q, t);
   await tween(1400, k => {
     const e = ease(k), tk = [q[0] + dl * e, q[1] + (t[1] - q[1]) * e];
@@ -698,7 +710,7 @@ const Rnormal = () => ident();
 $("pr-normal").onclick = () => animateTo(S.G, Rnormal());
 $("pr-trans").onclick = () => animateTo(S.G, d3R(0, 0, -90));
 $("pr-obl").onclick = () => animateTo(S.G, d3R(0, 0, -45));
-$("pr-reset").onclick = () => { S.lastMove = null; animateTo(ident(), ident()); };
+$("pr-reset").onclick = () => { S.lastMove = null; hideRoutes(false); animateTo(ident(), ident()); };
 
 function flatToCyl(e) {
   const r = flat.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;

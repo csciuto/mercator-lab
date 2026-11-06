@@ -34,4 +34,11 @@ var CITIES = [
  ["Ushuaia",-54.80,-68.30,3],["Fairbanks",64.84,-147.72,3]
 ];
 
-if (typeof module !== 'undefined') module.exports = { CITIES };
+// name of a known place at exactly this point, if any ([name, lat, lon, ...] lists, or PLACES-style [name, where, lat, lon])
+function cityAt(c, more) {
+  var near = function (lat, lon) { return Math.abs(lat - c[1]) < 1e-3 && Math.abs(lon - c[0]) < 1e-3; };
+  for (var i = 0; i < CITIES.length; i++) if (near(CITIES[i][1], CITIES[i][2])) return CITIES[i][0];
+  if (more) for (var j = 0; j < more.length; j++) if (near(more[j][2], more[j][3])) return more[j][0];
+  return undefined;
+}
+if (typeof module !== 'undefined') module.exports = { CITIES, cityAt };

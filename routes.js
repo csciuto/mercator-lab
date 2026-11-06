@@ -8,9 +8,8 @@ let nextId = 1;
 let showCities = true;
 const add = (type, a, b, an, bn) => lines.push({ id: nextId++, type, a, b, an, bn });
 // routes from the address (shared link, or handed over from Unroll the globe); otherwise examples showing the difference
-const cityAt = c => (CITIES.find(([, lat, lon]) => Math.abs(lat - c[1]) < 1e-3 && Math.abs(lon - c[0]) < 1e-3) || [])[0];
 const fromUrl = linesFromHash(location.hash);
-if (fromUrl) fromUrl.forEach(L => add(L.type, L.a, L.b, cityAt(L.a), cityAt(L.b)));
+if (fromUrl) fromUrl.forEach(L => add(L.type, L.a, L.b, cityAt(L.a, PLACES), cityAt(L.b, PLACES)));
 else {
   add("gc", [-71.06, 42.36], [37.62, 55.76], "Boston", "Moscow");
   add("rh", [-71.06, 42.36], [37.62, 55.76], "Boston", "Moscow");
@@ -159,12 +158,7 @@ svg.on("click", e => {
     const [x, y] = d3.pointer(e);
     p = pick(x, y);
   }
-  if (!pending) { pending = p; hover = p.c; }
-  else {
-    if (gcDist(pending.c, p.c) > 0.5) add(mode, pending.c, p.c, pending.name, p.name);
-    pending = null; hover = null; renderList();
-  }
-  render();
+  addPoint(p);
 });
 svg.on("pointermove", e => {
   const [x, y] = d3.pointer(e);
@@ -172,6 +166,55 @@ svg.on("pointermove", e => {
   document.getElementById("status").textContent = fmtLL(c);
   if (pending) { hover = c; render(); }
 });
+
+// a point from a click or the search box: the first starts a line, the second finishes it
+function addPoint(p) {
+  if (!pending) { pending = p; hover = p.c; }
+  else {
+    if (gcDist(pending.c, p.c) > 0.5) add(mode, pending.c, p.c, pending.name, p.name);
+    pending = null; hover = null; renderList();
+  }
+  render();
+}
+
+// ---------- search: a city or typed coordinates ----------
+const q = document.getElementById("q"), qList = document.getElementById("q-results");
+let qItems = [], qSel = 0;
+function showResults() {
+  const c = parseCoord(q.value);
+  qItems = (c ? [{ c, label: fmtLL(c), where: "" }] : [])
+    .concat(searchPlaces(PLACES, q.value, 8).map(([name, where, lat, lon]) => ({ c: [lon, lat], name, label: name, where })));
+  qSel = 0;
+  qList.innerHTML = "";
+  qItems.forEach((it, i) => {
+    const li = document.createElement("li");
+    li.setAttribute("role", "option"); li.setAttribute("aria-selected", i === qSel);
+    li.innerHTML = '<span class="n"></span><span class="w"></span>';
+    li.firstChild.textContent = it.label; li.lastChild.textContent = it.where;
+    li.addEventListener("mousedown", e => { e.preventDefault(); choose(i); });
+    qList.append(li);
+  });
+  qList.hidden = !qItems.length;
+}
+function choose(i) {
+  const it = qItems[i];
+  if (!it) return;
+  q.value = ""; qList.hidden = true; qItems = [];
+  // bring the point into view if it's off screen
+  const [x, y] = projection(it.c);
+  if (x < 40 || x > W - 40 || y < 40 || y > H - 40) svg.transition().duration(500).call(zoom.translateBy, (W / 2 - x) / tx.k, (H / 2 - y) / tx.k);
+  addPoint({ c: it.c, name: it.name });
+}
+q.addEventListener("input", showResults);
+q.addEventListener("keydown", e => {
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    qSel = (qSel + (e.key === "ArrowDown" ? 1 : -1) + qItems.length) % Math.max(1, qItems.length);
+    [...qList.children].forEach((li, i) => li.setAttribute("aria-selected", i === qSel));
+  } else if (e.key === "Enter") { e.preventDefault(); choose(qSel); }
+  else if (e.key === "Escape") { q.value = ""; qList.hidden = true; }
+});
+q.addEventListener("blur", () => { qList.hidden = true; });
 
 // ---------- list ----------
 function syncAddress() {
@@ -196,7 +239,8 @@ function renderList() {
     li.append("div").attr("class", "meta").html(
       `<b>${L.type === "gc" ? "Great circle" : "Rhumb line"}</b><br>` +
       `${fmtNum(km * KM_MI, km)} mi · ${fmtNum(km, km)} km · ${fmtNum(km * KM_NM, km)} nmi<br>` +
-      `<span class="c"></span>`);
+      `<span class="c"></span>` + (extraLabel(lines, L) ? `<br><span class="extra"></span>` : ""));
+    li.select(".extra").text(extraLabel(lines, L));
     li.select(".c").text(`${from} → ${to} · ${L.type === "gc" ? "initial course" : "constant course"} ${brg.toFixed(1)}°`);
     li.append("button").attr("class", "x").attr("aria-label", "Remove line").text("×")
       .on("click", () => { lines = lines.filter(x => x !== L); hot = null; renderList(); render(); });

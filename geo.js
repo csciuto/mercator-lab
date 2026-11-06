@@ -81,4 +81,61 @@ function placeLabels(items) {
   return kept;
 }
 
-if (typeof module !== 'undefined') module.exports = { R_KM, KM_MI, KM_NM, MAXLAT, rad, deg, wrapRad, wrapLon, psi, gcDist, gcBearing, gcInterp, rhumb, rhumbAt, rhumbPoints, lineDist, lineBearing, lineAt, fmtNum, distLabel, fmtLL, clampCoord, panToRotation, nearest, placeLabels };
+// ---- typed points: "42.36, -71.06", "42.36N 71.06W", "42°21′36″N 71°3′W" → [lon, lat], or null
+function parseHalf(t) {
+  var m = /^(-?\d+(?:\.\d+)?)\s*°?\s*(?:(\d+(?:\.\d+)?)\s*['′’]?\s*)?(?:(\d+(?:\.\d+)?)\s*["″”]?\s*)?([NSEW])?$/.exec(t.trim());
+  if (!m) return null;
+  var v = Math.abs(+m[1]) + (+(m[2] || 0)) / 60 + (+(m[3] || 0)) / 3600;
+  if (m[1][0] === "-" || m[4] === "S" || m[4] === "W") v = -v;
+  return { v: v, h: m[4] || "" };
+}
+function parseCoord(s) {
+  s = String(s).toUpperCase().trim();
+  var halves;
+  if (s.indexOf(",") >= 0) halves = s.split(",");
+  else if (/[NS]/.test(s) && /[EW]/.test(s)) halves = s.split(/(?<=[NSEW])\s*/).filter(Boolean);
+  else halves = s.split(/\s+/);
+  if (halves.length !== 2) return null;
+  var a = parseHalf(halves[0]), b = parseHalf(halves[1]);
+  if (!a || !b) return null;
+  var lat = a, lon = b;
+  if (/[EW]/.test(a.h) || /[NS]/.test(b.h)) { lat = b; lon = a; }       // longitude written first
+  if (/[EW]/.test(lat.h) || /[NS]/.test(lon.h)) return null;
+  if (Math.abs(lat.v) > 90 || Math.abs(lon.v) > 180) return null;
+  return [lon.v, lat.v];
+}
+
+// ---- search: places are [name, where, lat, lon], largest first. Name starts first, then name contains.
+function fold(s) { return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase(); }
+function searchPlaces(places, q, n) {
+  q = fold(q.trim()); n = n || 8;
+  if (!q) return [];
+  var starts = [], contains = [];
+  for (var i = 0; i < places.length && starts.length < n; i++) {
+    var f = fold(places[i][0]);
+    if (f.indexOf(q) === 0) starts.push(places[i]);
+    else if (contains.length < n && f.indexOf(q) > 0) contains.push(places[i]);
+  }
+  return starts.concat(contains).slice(0, n);
+}
+
+// ---- the other type of line between the same two points (either direction), or null
+function samePt(p, q) { return Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6; }
+function partnerOf(lines, L) {
+  for (var i = 0; i < lines.length; i++) {
+    var o = lines[i];
+    if (o.type !== L.type && ((samePt(o.a, L.a) && samePt(o.b, L.b)) || (samePt(o.a, L.b) && samePt(o.b, L.a)))) return o;
+  }
+  return null;
+}
+// on a rhumb line with a great-circle partner: "+480 mi · +773 km (11%) over the great circle"
+function extraLabel(lines, L) {
+  if (L.type !== "rh") return "";
+  var o = partnerOf(lines, L);
+  if (!o) return "";
+  var g = gcDist(o.a, o.b), r = rhumb(L.a, L.b).d, x = r - g;
+  if (x < 0.05) return "Same as the great circle";
+  return "+" + fmtNum(x * KM_MI, x) + " mi · +" + fmtNum(x, x) + " km (" + Math.round(x / g * 100) + "%) over the great circle";
+}
+
+if (typeof module !== 'undefined') module.exports = { parseCoord, searchPlaces, partnerOf, extraLabel, R_KM, KM_MI, KM_NM, MAXLAT, rad, deg, wrapRad, wrapLon, psi, gcDist, gcBearing, gcInterp, rhumb, rhumbAt, rhumbPoints, lineDist, lineBearing, lineAt, fmtNum, distLabel, fmtLL, clampCoord, panToRotation, nearest, placeLabels };

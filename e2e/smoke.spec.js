@@ -79,3 +79,31 @@ test('a shared link opens with its routes', async ({ page }) => {
   await expect(page.locator('#list li')).toHaveCount(1);
   await expect(page.locator('#list li')).toContainText('London → New York');
 });
+
+test('search: a city, then typed coordinates, make a line', async ({ page }) => {
+  await page.goto(APP);
+  await expect(page.locator('#list li')).toHaveCount(3);
+  await page.locator('#q').fill('mumb');
+  await expect(page.locator('#q-results li').first()).toContainText('Mumbai');
+  await page.keyboard.press('Enter');
+  await page.locator('#q').fill('35.68, 139.69');
+  await expect(page.locator('#q-results li').first()).toContainText('35.68°N 139.69°E');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#list li')).toHaveCount(4);
+  await expect(page.locator('#list li').last()).toContainText('Mumbai → 35.68°N 139.69°E');
+});
+
+test('a rhumb line with a great-circle partner shows how much longer it is', async ({ page }) => {
+  await page.goto(APP);
+  await expect(page.locator('#list li.rh .extra')).toContainText('(11%) over the great circle');
+});
+
+test('the US-over-Europe demo hides routes instead of dragging them along', async ({ page }) => {
+  await page.goto('/unroll/');
+  await expect(page.locator('#measList li').first()).toContainText('Boston → Moscow');
+  await page.locator('#demo').click();
+  await expect(page.locator('#demo')).toBeEnabled({ timeout: 30000 });
+  await expect(page.locator('#measList')).toContainText('Hidden while a country is moved');
+  await page.locator('#pr-reset').click();
+  await expect(page.locator('#measList li')).toHaveCount(2);
+});
