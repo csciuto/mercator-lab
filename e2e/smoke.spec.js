@@ -127,5 +127,13 @@ test('both views link to help, and the footer shows a version and contact', asyn
   await expect(page.locator('h1')).toContainText('How Mercator Lab works');
   await page.goto('/unroll/');
   await expect(page.locator('.foot .version')).toHaveText(/^(dev|v1\.\d+)$/);
-  await expect(page.locator('.foot a')).toHaveAttribute('href', '../help.html#unroll');
+  await expect(page.locator('.foot a').first()).toHaveAttribute('href', '../help.html#unroll');
+});
+
+test('contact and a link back to the projects page', async ({ page }) => {
+  for (const p of [APP, '/unroll/', '/help.html']) {
+    await page.goto(p);
+    await expect(page.getByText(/corey\.sciuto\+\w+@gmail\.com/).first()).toBeAttached();
+    await expect(page.locator('a[href="https://corey.sciu.to/projects/"]').first()).toBeAttached();
+  }
 });
