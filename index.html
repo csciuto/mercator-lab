@@ -2,26 +2,181 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rhumb &amp; Great Circle Plotter</title>
-  <meta name="description" content="Draw great-circle and rhumb-line routes on a Mercator world map and compare their distances.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Mercator Lab</title>
+  <meta name="description" content="Draw great-circle and rhumb-line routes on a Mercator map, and watch a globe unroll into one.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://corey.sciu.to/rhumb-great-circle/">
-  <meta property="og:title" content="Rhumb &amp; Great Circle Plotter">
-  <meta property="og:description" content="Draw great-circle and rhumb-line routes on a Mercator world map and compare their distances.">
-  <meta property="og:image" content="https://corey.sciu.to/rhumb-great-circle/preview.png">
+  <meta property="og:url" content="https://corey.sciu.to/mercator-lab/">
+  <meta property="og:title" content="Mercator Lab">
+  <meta property="og:description" content="Draw great-circle and rhumb-line routes on a Mercator map, and watch a globe unroll into one.">
+  <meta property="og:image" content="https://corey.sciu.to/mercator-lab/preview.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
-  <style>
-    body { margin: 0; font: 16px/1.5 system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; }
-  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Base reset */
+:root { box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; font: 14px -apple-system, BlinkMacSystemFont, sans-serif; }
+[hidden] { display: none !important; }
+
+/* Layout: full-bleed Mercator chart that wraps east-west; a chart-table panel floats, docks left/right, or shrinks to its header */
+:root {
+  --sea: #dfe8ec;
+  --land: #f4f2ea;
+  --border: #b9b5a6;
+  --grid: #c3d2d9;
+  --ink: #1d2a33;
+  --muted: #5d6d77;
+  --city: #4a5963;
+  --panel: rgba(250,251,250,.95);
+  --panel-solid: #f7f9f9;
+  --panel-line: #cdd6da;
+  --gc: #b2341f;
+  --rh: #1f5fa8;
+  --halo: #f7f8f6;
+  --f-display: "Spectral", Georgia, serif;
+  --f-body: "IBM Plex Sans", system-ui, sans-serif;
+  --f-data: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --sea: #0f1c24; --land: #23302f; --border: #3f4e4c; --grid: #1d3340; --ink: #e3eaec; --muted: #8fa1aa; --city: #a7b6bd;
+  --panel: rgba(18,28,34,.95); --panel-solid: #121c22; --panel-line: #2c3e48; --gc: #f0775c; --rh: #6aa9f0; --halo: #0f1c24; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --sea: #0f1c24; --land: #23302f; --border: #3f4e4c; --grid: #1d3340; --ink: #e3eaec; --muted: #8fa1aa; --city: #a7b6bd;
+  --panel: rgba(18,28,34,.95); --panel-solid: #121c22; --panel-line: #2c3e48; --gc: #f0775c; --rh: #6aa9f0; --halo: #0f1c24; color-scheme: dark }
+
+html, body { height: 100%; }
+body { background: var(--sea); color: var(--ink); font-family: var(--f-body); overflow: hidden; }
+#wrap { position: relative; height: 100%; display: flex; }
+#mapbox { position: relative; flex: 1; min-width: 0; height: 100%; }
+svg#map { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+.sphere { fill: var(--sea); }
+.grat { fill: none; stroke: var(--grid); stroke-width: .7; }
+.land { fill: var(--land); stroke: var(--border); stroke-width: .5; }
+.borders { fill: none; stroke: var(--border); stroke-width: .5; }
+.line { fill: none; stroke-width: 2.2; stroke-linecap: round; }
+.line.gc { stroke: var(--gc); }
+.line.rh { stroke: var(--rh); stroke-dasharray: 7 4; }
+.line.preview { opacity: .55; }
+.line.hot { stroke-width: 3.6; }
+.pt { stroke: var(--halo); stroke-width: 2; cursor: grab; }
+.pt.gc { fill: var(--gc); } .pt.rh { fill: var(--rh); }
+.pt:active { cursor: grabbing; }
+.lbl { font: 600 11.5px var(--f-data); paint-order: stroke; stroke: var(--halo); stroke-width: 3.5px; stroke-linejoin: round; pointer-events: none; font-variant-numeric: tabular-nums; }
+.lbl.gc { fill: var(--gc); } .lbl.rh { fill: var(--rh); }
+.city circle { fill: var(--city); }
+.city text { font: 500 10.5px var(--f-body); fill: var(--city); paint-order: stroke; stroke: var(--sea); stroke-width: 3px; stroke-linejoin: round; }
+.city.t1 text { font-weight: 600; font-size: 11px; }
+.city { pointer-events: none; }
+
+/* panel */
+#panel {
+  position: absolute; z-index: 2; top: 16px; left: 16px; width: 320px; max-height: calc(100% - 32px);
+  display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--panel-line); border-radius: 6px;
+  backdrop-filter: blur(6px); box-shadow: 0 6px 24px rgba(0,0,0,.12);
+}
+#panel.docked { position: relative; top: auto; left: auto; height: 100%; max-height: none; border-radius: 0; box-shadow: none; backdrop-filter: none; background: var(--panel-solid); flex: 0 0 320px; }
+#panel.docked.left { order: -1; border-width: 0 1px 0 0; }
+#panel.docked.right { order: 2; border-width: 0 0 0 1px; }
+#panel.min .body { display: none; }
+#panel.min.docked { height: auto; align-self: flex-start; border-width: 0 1px 1px 1px; }
+.head { display: flex; align-items: center; gap: 6px; padding: 10px 10px 10px 14px; cursor: move; user-select: none; touch-action: none; }
+#panel.docked .head { cursor: default; }
+.head h1 { margin: 0; flex: 1; min-width: 0; font: 700 16px/1.15 var(--f-display); letter-spacing: .01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tools { display: flex; gap: 2px; }
+.tool { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; padding: 0; }
+.tool:hover { color: var(--ink); border-color: var(--panel-line); }
+.tool[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); }
+.tool svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+.modebar { padding: 0 14px 12px; }
+.views { display: flex; gap: 4px; padding: 0 14px 10px; font: 500 12.5px var(--f-body); }
+.views a { padding: 4px 9px; border-radius: 4px; color: var(--muted); text-decoration: none; border: 1px solid transparent; }
+.views a:hover { color: var(--ink); border-color: var(--panel-line); }
+.views a[aria-current="page"] { color: var(--ink); border-color: var(--ink); }
+.body { display: flex; flex-direction: column; gap: 12px; padding: 0 14px 14px; min-height: 0; flex: 1; }
+.sub { margin: -4px 0 0; font-size: 12px; color: var(--muted); }
+.seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--panel-line); border-radius: 5px; overflow: hidden; }
+.seg button { font: 500 13px var(--f-body); padding: 7px 6px; border: 0; background: transparent; color: var(--ink); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; }
+.seg button + button { border-left: 1px solid var(--panel-line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--halo); }
+.swatch { width: 18px; height: 0; border-top: 3px solid; }
+.swatch.gc { border-color: var(--gc); } .swatch.rh { border-color: var(--rh); border-top-style: dashed; }
+.hint { font-size: 12px; color: var(--muted); line-height: 1.45; margin: 0; }
+.hint kbd { font: 500 11px var(--f-data); border: 1px solid var(--panel-line); border-radius: 3px; padding: 0 4px; }
+.cap { font: 600 10.5px var(--f-body); text-transform: uppercase; letter-spacing: .09em; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+#list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; min-height: 0; }
+#list li { display: grid; grid-template-columns: 4px 1fr auto; gap: 9px; padding: 7px 6px 7px 0; border-bottom: 1px solid var(--panel-line); font-size: 12px; }
+#list li .bar { border-radius: 2px; }
+#list li.gc .bar { background: var(--gc); } #list li.rh .bar { background: var(--rh); }
+#list .meta { min-width: 0; font-family: var(--f-data); font-variant-numeric: tabular-nums; line-height: 1.5; }
+#list .meta b { font-family: var(--f-body); font-weight: 600; }
+#list .meta .c { color: var(--muted); font-size: 11px; }
+.x { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 4px; align-self: start; }
+.x:hover { color: var(--gc); }
+.empty { font-size: 12px; color: var(--muted); padding: 4px 0; }
+.btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { font: 500 12px var(--f-body); padding: 6px 10px; border: 1px solid var(--panel-line); border-radius: 4px; background: transparent; color: var(--ink); cursor: pointer; }
+.btn:hover { border-color: var(--ink); }
+.chk { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+button:focus-visible { outline: 2px solid var(--rh); outline-offset: 2px; }
+#status { position: absolute; right: 16px; bottom: 16px; font: 500 11px var(--f-data); color: var(--muted); background: var(--panel); border: 1px solid var(--panel-line); padding: 4px 8px; border-radius: 4px; pointer-events: none; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 640px) {
+  #panel, #panel.docked { position: absolute; top: auto !important; bottom: 16px; left: 16px !important; right: 16px; width: auto; height: auto; max-height: 50%; border-radius: 6px; border-width: 1px; order: 0; }
+  .dockbtn { display: none !important; }
+  .head { cursor: default; }
+  #status { top: 16px; bottom: auto; }
+}
+</style>
 </head>
 <body>
-  <main id="app">
-    <h1>Rhumb &amp; Great Circle Plotter</h1>
-    <p>Draw great-circle and rhumb-line routes on a Mercator world map and compare their distances.</p>
-  </main>
-  <script type="module" src="main.js"></script>
+<div id="wrap">
+  <div id="mapbox">
+    <svg id="map" role="img" aria-label="Mercator world map with drawn lines"></svg>
+    <div id="status">—</div>
+  </div>
+  <aside id="panel" aria-label="Line tools">
+    <div class="head" id="head">
+      <h1>Mercator Lab</h1>
+      <div class="tools">
+        <button class="tool dockbtn" id="dock-left" title="Dock left" aria-label="Dock left" aria-pressed="false"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1"/><line x1="6" y1="2.5" x2="6" y2="13.5"/></svg></button>
+        <button class="tool dockbtn" id="dock-float" title="Float" aria-label="Float" aria-pressed="true"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1"/><rect x="4" y="5" width="6" height="5"/></svg></button>
+        <button class="tool dockbtn" id="dock-right" title="Dock right" aria-label="Dock right" aria-pressed="false"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1"/><line x1="10" y1="2.5" x2="10" y2="13.5"/></svg></button>
+        <button class="tool" id="minimize" title="Collapse" aria-label="Collapse panel" aria-expanded="true"><svg viewBox="0 0 16 16"><polyline id="minico" points="4,10 8,6 12,10"/></svg></button>
+      </div>
+    </div>
+    <nav class="views" aria-label="Views"><a href="./" aria-current="page">Routes</a><a id="to-other" href="unroll/">Unroll the globe</a></nav>
+    <div class="modebar">
+      <div class="seg" role="group" aria-label="Line type">
+        <button id="m-gc" aria-pressed="true"><span class="swatch gc"></span>Great circle</button>
+        <button id="m-rh" aria-pressed="false"><span class="swatch rh"></span>Rhumb line</button>
+      </div>
+    </div>
+    <div class="body">
+      <p class="sub">Mercator · mean Earth radius 6,371.0 km</p>
+      <p class="hint">Click two points to draw. Clicks near a city snap to it. Drag an endpoint to move it. Scroll or pinch to zoom; drag to pan, east–west wraps forever. <kbd>G</kbd>/<kbd>R</kbd> switch type, <kbd>Esc</kbd> cancels, <kbd>⌫</kbd> removes the last line.</p>
+      <div class="cap"><span id="count">Lines</span><span>mi · km · nmi</span></div>
+      <ul id="list"></ul>
+      <div class="btns">
+        <button class="btn" id="undo">Remove last</button>
+        <button class="btn" id="clear">Clear all</button>
+        <button class="btn" id="pair">Compare both types</button>
+        <button class="btn" id="reset">Reset view</button>
+      </div>
+      <label class="chk"><input type="checkbox" id="showcities" checked> Show cities</label>
+    </div>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<script src="geo.js"></script>
+<script src="cities.js"></script>
+<script src="world.js"></script>
+<script src="lines.js"></script>
+<script src="routes.js"></script>
 </body>
 </html>

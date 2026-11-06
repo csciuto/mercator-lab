@@ -1,0 +1,84 @@
+// Pure geodesy and formatting. No DOM, no d3: unit-tested in Node (tests/geo.test.js).
+var R_KM = 6371.0088, KM_MI = 0.621371, KM_NM = 1 / 1.852, MAXLAT = 85.05113;
+function rad(d) { return d * Math.PI / 180; }
+function deg(r) { return r * 180 / Math.PI; }
+function wrapRad(x) { x = (x + Math.PI) % (2 * Math.PI); if (x < 0) x += 2 * Math.PI; return x - Math.PI; }
+function wrapLon(l) { l = (l + 180) % 360; if (l < 0) l += 360; return l - 180; }
+function psi(phi) { return Math.log(Math.tan(Math.PI / 4 + phi / 2)); }
+function gcDist(a, b) {
+  var p1 = rad(a[1]), p2 = rad(b[1]), dp = p2 - p1, dl = rad(b[0] - a[0]);
+  var h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * R_KM * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+function gcBearing(a, b) {
+  var p1 = rad(a[1]), p2 = rad(b[1]), dl = rad(b[0] - a[0]);
+  var y = Math.sin(dl) * Math.cos(p2);
+  var x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return (deg(Math.atan2(y, x)) + 360) % 360;
+}
+function gcInterp(a, b, t) {
+  var p1 = rad(a[1]), l1 = rad(a[0]), p2 = rad(b[1]), l2 = rad(b[0]);
+  var d = gcDist(a, b) / R_KM;
+  if (d < 1e-12) return a.slice();
+  var A = Math.sin((1 - t) * d) / Math.sin(d), B = Math.sin(t * d) / Math.sin(d);
+  var x = A * Math.cos(p1) * Math.cos(l1) + B * Math.cos(p2) * Math.cos(l2);
+  var y = A * Math.cos(p1) * Math.sin(l1) + B * Math.cos(p2) * Math.sin(l2);
+  var z = A * Math.sin(p1) + B * Math.sin(p2);
+  return [deg(Math.atan2(y, x)), deg(Math.atan2(z, Math.hypot(x, y)))];
+}
+function rhumb(a, b) {
+  var p1 = rad(a[1]), p2 = rad(b[1]), dp = p2 - p1;
+  var dl = wrapRad(rad(b[0] - a[0]));
+  var dpsi = psi(p2) - psi(p1);
+  var q = Math.abs(dpsi) > 1e-12 ? dp / dpsi : Math.cos(p1);
+  return {
+    d: Math.sqrt(dp * dp + q * q * dl * dl) * R_KM,
+    brg: (deg(Math.atan2(dl, dpsi)) + 360) % 360,
+    dl: dl, dpsi: dpsi, psi1: psi(p1)
+  };
+}
+function rhumbAt(a, b, t, r) {
+  r = r || rhumb(a, b);
+  var lam = wrapRad(rad(a[0]) + t * r.dl);
+  var phi = 2 * Math.atan(Math.exp(r.psi1 + t * r.dpsi)) - Math.PI / 2;
+  return [deg(lam), deg(phi)];
+}
+function rhumbPoints(a, b, n) {
+  n = n || 160; var r = rhumb(a, b), out = [];
+  for (var i = 0; i <= n; i++) out.push(rhumbAt(a, b, i / n, r));
+  return out;
+}
+function lineDist(L) { return L.type === "gc" ? gcDist(L.a, L.b) : rhumb(L.a, L.b).d; }
+function lineBearing(L) { return L.type === "gc" ? gcBearing(L.a, L.b) : rhumb(L.a, L.b).brg; }
+function lineAt(L, t) { return L.type === "gc" ? gcInterp(L.a, L.b, t) : rhumbAt(L.a, L.b, t); }
+function fmtNum(x, km) {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: km < 100 ? 1 : 0 }).format(x);
+}
+function distLabel(km) { return fmtNum(km * KM_MI, km) + " mi · " + fmtNum(km, km) + " km"; }
+function fmtLL(c) {
+  var lon = c[0], lat = c[1];
+  return Math.abs(lat).toFixed(2) + "°" + (lat >= 0 ? "N" : "S") + " " + Math.abs(lon).toFixed(2) + "°" + (lon >= 0 ? "E" : "W");
+}
+function clampCoord(c) { return [wrapLon(c[0]), Math.max(-MAXLAT, Math.min(MAXLAT, c[1]))]; }
+// horizontal pan offset (screen px) -> longitude rotation (deg) for a world `worldPx` wide
+function panToRotation(px, worldPx) { return wrapLon(px / worldPx * 360); }
+// nearest item within `radius` px; items have {x, y}
+function nearest(items, x, y, radius) {
+  var best = null, bd = radius * radius;
+  for (var i = 0; i < items.length; i++) {
+    var dx = items[i].x - x, dy = items[i].y - y, d = dx * dx + dy * dy;
+    if (d <= bd) { bd = d; best = items[i]; }
+  }
+  return best;
+}
+// greedy label placement: keep boxes that don't overlap ones already kept
+function placeLabels(items) {
+  var kept = [];
+  items.forEach(function (it) {
+    var hit = kept.some(function (k) { return it.x0 < k.x1 && it.x1 > k.x0 && it.y0 < k.y1 && it.y1 > k.y0; });
+    if (!hit) kept.push(it);
+  });
+  return kept;
+}
+
+if (typeof module !== 'undefined') module.exports = { R_KM, KM_MI, KM_NM, MAXLAT, rad, deg, wrapRad, wrapLon, psi, gcDist, gcBearing, gcInterp, rhumb, rhumbAt, rhumbPoints, lineDist, lineBearing, lineAt, fmtNum, distLabel, fmtLL, clampCoord, panToRotation, nearest, placeLabels };

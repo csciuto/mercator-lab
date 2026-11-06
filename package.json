@@ -1,10 +1,11 @@
 {
-  "name": "rhumb-great-circle",
+  "name": "mercator-lab",
   "private": true,
   "scripts": {
     "serve": "python3 -m http.server 8090",
-    "test": "playwright test",
-    "screenshot": "UPDATE_PREVIEW=1 playwright test e2e/smoke.spec.js"
+    "test": "node --test 'tests/*.test.js' && playwright test",
+    "screenshot": "UPDATE_PREVIEW=1 playwright test e2e/smoke.spec.js",
+    "test:unit": "node --test 'tests/*.test.js'"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1"
