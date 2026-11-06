@@ -1,0 +1,12 @@
+{
+  "name": "__NAME__",
+  "private": true,
+  "scripts": {
+    "serve": "python3 -m http.server 8090",
+    "test": "playwright test",
+    "screenshot": "UPDATE_PREVIEW=1 playwright test e2e/smoke.spec.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1"
+  }
+}
