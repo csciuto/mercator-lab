@@ -320,7 +320,7 @@ function renderMeasList() {
   const ul = $("measList"); ul.innerHTML = "";
   if (S.routesHidden && S.meas.length) {
     const li = document.createElement("li"); li.style.display = "block"; li.style.border = "0"; li.className = "prose";
-    li.textContent = "Hidden while a country is moved. Reset both shows them."; ul.append(li); return;
+    li.textContent = "Hidden while a country is moved. Reset both to show."; ul.append(li); return;
   }
   if (!S.meas.length) { const li = document.createElement("li"); li.style.display = "block"; li.style.border = "0"; li.className = "prose"; li.textContent = "No lines yet."; ul.append(li); return; }
   for (const m of S.meas) {
@@ -500,9 +500,9 @@ function drawFlat() {
 
 // ---------------- readouts / notes ----------------
 const NOTES = {
-  merc: "<b>Mercator has no light source.</b> Each point goes to height ln tan(45° + φ/2), measured from the cylinder's equator. That keeps angles right; lengths stretch by sec φ.",
-  central: "<b>Light at the globe's centre.</b> Height is tan φ. It looks like Mercator near the equator and gets much worse toward the poles. Past about 72° it runs off the cylinder.",
-  lambert: "<b>Rays straight out from the axis.</b> Height is sin φ. Areas come out exactly right, and shapes get squashed toward the poles.",
+  merc: "<b>Mercator: no light source.</b> Height ln tan(45° + φ/2). Angles true; lengths stretch by sec φ.",
+  central: "<b>Light at the centre.</b> Height tan φ. Runs off the cylinder past about 72°.",
+  lambert: "<b>Rays out from the axis.</b> Height sin φ. Areas true; shapes squashed toward the poles.",
 };
 function updateReadout() {
   const Mr = M();
@@ -587,11 +587,11 @@ async function animateTo(Gt, Ct, ms = 1000) {
 }
 
 // ---------------- input ----------------
-const HINT = "Drag the globe to turn it, drag the cylinder to turn it, drag empty space to look around. Shift-drag turns both together; right-drag always looks around. Click the globe to measure.";
+const HINT = "Drag: turn the globe or cylinder · Shift-drag: both · Drag empty space or right-drag: look around · Click the globe: add a point";
 const HOVER_HINT = {
-  globe: "Drag: turn the globe (the map changes). Click: drop a measuring point. Shift-drag: turn both.",
-  cyl: "Drag: turn the cylinder (the map changes). Shift-drag: turn both.",
-  view: "Drag: look around. Nothing about the map changes.",
+  globe: "Drag: turn the globe · Click: add a point · Shift-drag: turn both",
+  cyl: "Drag: turn the cylinder · Shift-drag: turn both",
+  view: "Drag: look around",
 };
 let hoverTarget = null;
 $("dragHint").textContent = HINT;

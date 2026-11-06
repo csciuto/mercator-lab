@@ -3,11 +3,13 @@
   "private": true,
   "scripts": {
     "serve": "python3 -m http.server 8090",
-    "test": "node --test 'tests/*.test.js' && playwright test",
-    "screenshot": "UPDATE_PREVIEW=1 playwright test e2e/smoke.spec.js",
-    "test:unit": "node --test 'tests/*.test.js'"
+    "test": "node --test 'tests/*.test.js'",
+    "test:e2e": "playwright test",
+    "test:all": "npm test && npm run test:e2e",
+    "screenshot": "UPDATE_PREVIEW=1 playwright test e2e/smoke.spec.js --project=desktop -g 'app loads'"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
     "@playwright/test": "^1.64.1"
   }
 }

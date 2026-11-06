@@ -7,7 +7,7 @@ const APP = '/';
 const PREVIEW = 'preview.png';
 const READY = '#map path.land';
 
-test('app loads without errors', async ({ page }) => {
+test('app loads without errors @desktop', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.setViewportSize({ width: 1200, height: 630 });
@@ -19,6 +19,10 @@ test('app loads without errors', async ({ page }) => {
   if (process.env.UPDATE_PREVIEW) {
     await page.waitForTimeout(750);
     await page.screenshot({ path: PREVIEW });
+    await page.setViewportSize({ width: 1200, height: 740 });  // the picture on the help page
+    await page.goto('/unroll/');
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: 'help-unroll.png' });
   }
 });
 
@@ -27,8 +31,8 @@ test('two clicks draw a line; Remove last takes it away', async ({ page }) => {
   await expect(page.locator(READY).first()).toBeVisible();
   const box = await page.locator('#map').boundingBox();
   await page.locator('#m-rh').click();
-  await page.mouse.click(box.x + box.width * 0.75, box.y + box.height * 0.75);
-  await page.mouse.click(box.x + box.width * 0.85, box.y + box.height * 0.55);
+  await page.mouse.click(box.x + box.width * 0.75, box.y + box.height * 0.2);
+  await page.mouse.click(box.x + box.width * 0.85, box.y + box.height * 0.3);
   await expect(page.locator('#list li')).toHaveCount(4);
   await expect(page.locator('#list li').last()).toHaveClass(/rh/);
   await expect(page.locator('#list li').last()).toContainText('Rhumb line');
@@ -106,4 +110,22 @@ test('the US-over-Europe demo hides routes instead of dragging them along', asyn
   await expect(page.locator('#measList')).toContainText('Hidden while a country is moved');
   await page.locator('#pr-reset').click();
   await expect(page.locator('#measList li')).toHaveCount(2);
+});
+
+test('Unroll the globe fits a phone: nothing scrolls sideways', async ({ page }) => {
+  await page.goto('/unroll/');
+  await expect(page.locator('#flat')).toBeVisible();
+  const w = page.viewportSize().width;
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(w);
+});
+
+test('both views link to help, and the footer shows a version and contact', async ({ page }) => {
+  await page.goto(APP);
+  await expect(page.locator('.credit')).toContainText('corey.sciuto+mercator@gmail.com');
+  await expect(page.locator('.version')).toHaveText(/^(dev|v1\.\d+)$/);
+  await page.locator('.credit a', { hasText: 'Help' }).click();
+  await expect(page.locator('h1')).toContainText('How Mercator Lab works');
+  await page.goto('/unroll/');
+  await expect(page.locator('.foot .version')).toHaveText(/^(dev|v1\.\d+)$/);
+  await expect(page.locator('.foot a')).toHaveAttribute('href', '../help.html#unroll');
 });

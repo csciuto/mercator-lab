@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Help · Mercator Lab</title>
+  <meta name="description" content="How to use Mercator Lab: drawing routes, and unrolling the globe.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <style>
+    /* Same palette as Routes. One reading column. */
+    :root {
+      --sea: #dfe8ec; --paper: #f7f9f9; --ink: #1d2a33; --muted: #5d6d77; --line: #cdd6da; --gc: #b2341f; --rh: #1f5fa8;
+      --f-display: "Spectral", Georgia, serif; --f-body: "IBM Plex Sans", system-ui, sans-serif;
+      box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    @media (prefers-color-scheme: dark) { :root { --sea: #0f1c24; --paper: #121c22; --ink: #e3eaec; --muted: #8fa1aa; --line: #2c3e48; --gc: #f0775c; --rh: #6aa9f0; color-scheme: dark; } }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.6 var(--f-body); }
+    header, main, footer { max-width: 760px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+    header { padding-block: 28px 12px; display: grid; gap: 8px; border-bottom: 1px solid var(--line); }
+    header a { color: var(--rh); font-size: 13px; text-decoration: none; }
+    h1 { margin: 0; font: 700 28px/1.15 var(--f-display); text-wrap: balance; }
+    h2 { margin: 0; font: 700 21px/1.2 var(--f-display); }
+    main { padding-block: 20px 40px; display: grid; gap: 40px; }
+    section { display: grid; gap: 12px; scroll-margin-top: 16px; }
+    p, ul { margin: 0; max-width: 66ch; }
+    ul { padding-left: 20px; display: grid; gap: 4px; }
+    kbd { font: 500 12px ui-monospace, Menlo, monospace; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
+    img { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--sea); }
+    .gc { color: var(--gc); font-weight: 600; } .rh { color: var(--rh); font-weight: 600; }
+    footer { padding-block: 16px 32px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+    footer a { color: inherit; }
+    a:focus-visible { outline: 2px solid var(--rh); outline-offset: 2px; }
+  </style>
+</head>
+<body>
+<header>
+  <a href="./">← Mercator Lab</a>
+  <h1>How Mercator Lab works</h1>
+</header>
+<main>
+  <section id="routes">
+    <h2>Routes</h2>
+    <p>A <span class="gc">great circle</span> is the shortest way between two points; its compass course keeps
+      changing. A <span class="rh">rhumb line</span> keeps one compass course the whole way, so it's a straight line on
+      a Mercator map, and longer.</p>
+    <img src="preview.png" alt="Routes: Boston to Moscow drawn both ways on a Mercator map, and London to Sydney as a great circle." width="1200" height="630" loading="lazy">
+    <ul>
+      <li>Click two points, or search a city or coordinates (<kbd>42.36, -71.06</kbd>, <kbd>42.36N 71.06W</kbd>).</li>
+      <li><b>Compare both types</b> adds the missing partner for each route; the rhumb line then shows how much
+        longer it is.</li>
+      <li>Drag an endpoint to move it. Scroll or pinch to zoom; drag to pan.</li>
+      <li><kbd>G</kbd>/<kbd>R</kbd> line type · <kbd>Esc</kbd> cancel · <kbd>⌫</kbd> remove last.</li>
+      <li>The address keeps your routes, so you can bookmark or share them.</li>
+    </ul>
+  </section>
+
+  <section id="unroll">
+    <h2>Unroll the globe</h2>
+    <p>A Mercator map is a globe wrapped in a cylinder and unrolled. Step through it with <b>On globe</b>,
+      <b>Project</b> and <b>Unroll</b>.</p>
+    <img src="help-unroll.png" alt="Unroll the globe: a globe inside a cylinder, with the unrolled map beside it." width="1200" height="740" loading="lazy">
+    <ul>
+      <li>The flat map depends only on how the globe sits inside the cylinder. Turn both together and nothing
+        changes.</li>
+      <li><b>Projection</b> swaps in other cylinders. Mercator isn't a light shining through the globe; the other
+        two are.</li>
+      <li><b>Freeze as copy A</b> keeps the current map printed on the cylinder; it turns with the cylinder.</li>
+      <li><b>Move country</b> keeps the cylinder still and turns the globe, the way size-comparison maps do. A
+        country moved north lands where the cylinder stretches more, and its old latitude lines no longer match
+        the cylinder's rings. That's where the bent borders come from.</li>
+      <li>Your routes come along from Routes and back. They ride on the globe, so they hide while a country is
+        moved.</li>
+    </ul>
+  </section>
+</main>
+<footer>
+  Questions: corey.sciuto+mercator@gmail.com · City search: <a href="https://www.geonames.org/">GeoNames</a>
+  (CC BY 4.0) · Map: <a href="https://www.naturalearthdata.com/">Natural Earth</a> ·
+  <a href="https://github.com/csciuto/mercator-lab">Source</a> · <span class="version" title="Version">dev</span>
+</footer>
+</body>
+</html>

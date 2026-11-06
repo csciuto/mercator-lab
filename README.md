@@ -26,15 +26,18 @@ link between the views carries them across.
 | `cities.js` | The labeled cities and when each appears as you zoom; `cityAt` names a point. |
 | `places.js` | Cities for search, from GeoNames (CC BY 4.0). Built from `cities15000.txt`, keeping 100,000+ people. |
 | `index.html`, `routes.js` | Routes. |
+| `help.html` | The help page. |
 | `unroll/index.html`, `unroll/unroll.js` | Unroll the globe (three.js r128). |
 
 ## Development
 
-No build step: plain HTML, CSS and JavaScript, published by GitHub Pages from `main`.
+No build step: plain HTML, CSS and JavaScript. Each push to `main` runs the tests in GitHub Actions and, if they
+pass, publishes to GitHub Pages with a version stamp.
 
 ```bash
 npm run serve                                     # http://localhost:8090
 npm install && npx playwright install chromium   # first time only
-npm test                                          # unit tests (node --test) then the browser tests
-npm run screenshot                                # refreshes preview.png, used for link previews
+npm test                                          # unit tests (node --test)
+npm run test:e2e                                  # browser tests, desktop and phone, with accessibility checks
+npm run screenshot                                # refreshes preview.png and the help page's picture
 ```

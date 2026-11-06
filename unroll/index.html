@@ -118,6 +118,8 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
 .chk { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink); }
 .prose { margin: 0; color: var(--muted); line-height: 1.5; font-size: 12.5px; max-width: 60ch; }
 .prose b { color: var(--ink); font-weight: 600; }
+.prose a { color: var(--ink); }
+.foot { margin-top: auto; border-bottom: 0; }
 
 @media (max-width: 900px) {
   body { overflow: auto; }
@@ -162,7 +164,7 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
       </div>
     </div>
     <div class="grp">
-      <button class="btn a" id="freeze" title="Keep the current projection on the cylinder as layer A">Freeze as copy A</button>
+      <button class="btn a" id="freeze" title="Keep this projection on the cylinder as copy A">Freeze as copy A</button>
       <button class="btn" id="clearA" disabled>Clear A</button>
     </div>
     <span class="spacer"></span>
@@ -173,7 +175,7 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
     <section id="bench" aria-label="3D globe and cylinder">
       <div class="overlay">
         <div class="grp" style="flex-wrap:wrap">
-          <button class="btn" id="resetView" title="Back to the starting camera angle (or double-click the scene)">Reset view</button>
+          <button class="btn" id="resetView" title="Starting camera (or double-click)">Reset view</button>
           <label class="chk"><input type="checkbox" id="print" checked> Live print on cylinder</label>
           <label class="inl" for="opacity">Globe <input type="range" id="opacity" min="0" max="100" step="1" value="55"><output id="opo">55%</output></label>
         </div>
@@ -208,7 +210,7 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
           <button id="mt-gc" aria-pressed="true"><i class="sw gcl"></i>Great circle</button>
           <button id="mt-rh" aria-pressed="false"><i class="sw rhl"></i>Rhumb line</button>
         </span>
-        <p class="prose">Click two points on the globe or on the flat map. Lines stay attached to the globe, so you can watch them through every projection. <kbd>G</kbd>/<kbd>R</kbd> switch type, <kbd>Esc</kbd> cancels, <kbd>⌫</kbd> removes the last line.</p>
+        <p class="prose">Click two points on the globe or map. <kbd>G</kbd>/<kbd>R</kbd> type · <kbd>Esc</kbd> cancel · <kbd>⌫</kbd> remove last</p>
         <ul id="measList"></ul>
         <div class="row">
           <button class="btn" id="mUndo">Remove last</button>
@@ -230,21 +232,21 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
           <button class="btn" id="move">Move country…</button>
           <button class="btn cyl" id="bring" disabled>Bring the cylinder along</button>
         </div>
-        <p class="prose" id="moveText">"Move country" spins the globe under a fixed cylinder, the way size-comparison maps do. Click it, then click a spot on the flat map.</p>
+        <p class="prose" id="moveText">Click it, then a spot on the flat map.</p>
       </div>
 
       <div class="sec" id="globeSec">
         <h3><span class="dot" style="background:var(--earth)"></span>Globe orientation</h3>
-        <div class="slider"><span>Spin</span><input type="range" id="g0" min="-180" max="180" step="0.5" value="0"><output id="g0o">0°</output></div>
-        <div class="slider"><span>Tilt</span><input type="range" id="g1" min="-90" max="90" step="0.5" value="0"><output id="g1o">0°</output></div>
-        <div class="slider"><span>Roll</span><input type="range" id="g2" min="-180" max="180" step="0.5" value="0"><output id="g2o">0°</output></div>
+        <div class="slider"><label for="g0">Spin</label><input type="range" id="g0" min="-180" max="180" step="0.5" value="0"><output id="g0o">0°</output></div>
+        <div class="slider"><label for="g1">Tilt</label><input type="range" id="g1" min="-90" max="90" step="0.5" value="0"><output id="g1o">0°</output></div>
+        <div class="slider"><label for="g2">Roll</label><input type="range" id="g2" min="-180" max="180" step="0.5" value="0"><output id="g2o">0°</output></div>
       </div>
 
       <div class="sec" id="cylSec">
         <h3><span class="dot" style="background:var(--cyl)"></span>Cylinder orientation</h3>
-        <div class="slider"><span>Spin</span><input type="range" id="c0" min="-180" max="180" step="0.5" value="0"><output id="c0o">0°</output></div>
-        <div class="slider"><span>Tilt</span><input type="range" id="c1" min="-90" max="90" step="0.5" value="0"><output id="c1o">0°</output></div>
-        <div class="slider"><span>Roll</span><input type="range" id="c2" min="-180" max="180" step="0.5" value="0"><output id="c2o">0°</output></div>
+        <div class="slider"><label for="c0">Spin</label><input type="range" id="c0" min="-180" max="180" step="0.5" value="0"><output id="c0o">0°</output></div>
+        <div class="slider"><label for="c1">Tilt</label><input type="range" id="c1" min="-90" max="90" step="0.5" value="0"><output id="c1o">0°</output></div>
+        <div class="slider"><label for="c2">Roll</label><input type="range" id="c2" min="-180" max="180" step="0.5" value="0"><output id="c2o">0°</output></div>
         <div class="row">
           <button class="btn" id="pr-normal">Normal</button>
           <button class="btn" id="pr-trans">Transverse</button>
@@ -253,11 +255,9 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
         </div>
       </div>
 
-      <div class="sec">
-        <h3>What's going on</h3>
-        <p class="prose">The flat map only depends on how the globe sits <b>inside</b> the cylinder. Turn both together and nothing changes. A copy you freeze stays printed on the cylinder and turns with it.</p>
-        <p class="prose">Size-comparison maps keep the cylinder still and turn the globe. A country moved north lands on a part of the cylinder that stretches more, and its old latitude lines no longer match the cylinder's rings. That's where the bent borders come from.</p>
-      </div>
+      <footer class="sec foot">
+        <p class="prose"><a href="../help.html#unroll">How it works</a> · Questions: corey.sciuto+mercator@gmail.com · <span class="version" title="Version">dev</span></p>
+      </footer>
     </aside>
   </main>
 </div>

@@ -144,10 +144,10 @@ button:focus-visible { outline: 2px solid var(--rh); outline-offset: 2px; }
 </head>
 <body>
 <div id="wrap">
-  <div id="mapbox">
+  <main id="mapbox">
     <svg id="map" role="img" aria-label="Mercator world map with drawn lines"></svg>
-    <div id="status">—</div>
-  </div>
+    <div id="status" aria-live="off">—</div>
+  </main>
   <aside id="panel" aria-label="Line tools">
     <div class="head" id="head">
       <h1>Mercator Lab</h1>
@@ -181,7 +181,7 @@ button:focus-visible { outline: 2px solid var(--rh); outline-offset: 2px; }
         <button class="btn" id="reset">Reset view</button>
       </div>
       <label class="chk"><input type="checkbox" id="showcities" checked> Show cities</label>
-      <p class="credit">City search: <a href="https://www.geonames.org/">GeoNames</a> (CC BY 4.0)</p>
+      <p class="credit"><a href="help.html">Help</a> · Questions: corey.sciuto+mercator@gmail.com · <span class="version" title="Version">dev</span><br>City search: <a href="https://www.geonames.org/">GeoNames</a> (CC BY 4.0)</p>
     </div>
   </aside>
 </div>
