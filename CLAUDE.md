@@ -3,6 +3,9 @@
 Draw great-circle and rhumb-line routes on a Mercator map, and watch a globe unroll into one. Two views:
 Routes (`/`) and Unroll the globe (`/unroll/`). See README.md for the file layout.
 
+Follows the app standards in [csciuto/app-template STANDARDS.md](https://github.com/csciuto/app-template/blob/main/STANDARDS.md).
+Commit and push freely once tests pass.
+
 ## Conventions
 
 - Static site, no build step and no framework unless there's a real need. `.github/workflows/deploy.yml` runs every test on each push to `main`, stamps the version (`v1.<commits>`, replacing `dev` in each page's `.version`) and only then publishes to https://corey.sciu.to/mercator-lab/.
