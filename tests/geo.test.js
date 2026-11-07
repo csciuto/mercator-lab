@@ -58,6 +58,6 @@ test('labels: nearest within radius, overlapping boxes dropped', () => {
   assert.equal(kept.length, 2);
 });
 
-test('distance label shows miles and kilometres', () => {
+test('distance label shows miles and kilometers', () => {
   assert.equal(G.distLabel(1000), '621 mi · 1,000 km');
 });

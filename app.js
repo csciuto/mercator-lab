@@ -157,7 +157,7 @@ const cylStatics = [cylSurface];
   }
   const n = label("Map N", COL.cyl, 0.42); n.position.set(0, MAXH + 0.85, 0); cyl.add(n); cylStatics.push(n);
   const s = label("seam", COL.seam, 0.36); s.position.set(0, MAXH + 0.2, -1); cyl.add(s); cylStatics.push(s);
-  const m = label("map centre", COL.cyl, 0.36); m.position.set(0, MAXH + 0.2, 1); cyl.add(m); cylStatics.push(m);
+  const m = label("map center", COL.cyl, 0.36); m.position.set(0, MAXH + 0.2, 1); cyl.add(m); cylStatics.push(m);
 })();
 
 // dynamic line layers ----
@@ -489,7 +489,7 @@ function drawFlat() {
     if (Math.abs(q[1]) <= latMax(S.mode)) { const [x, y] = flatXY(rad(q[0]), cylH(S.mode, rad(q[1]))); g.fillStyle = COL.b; g.beginPath(); g.arc(x, y, 4.5, 0, 2 * Math.PI); g.fill(); }
   }
 
-  // cylinder equator, centre line, seam edges
+  // cylinder equator, center line, seam edges
   g.strokeStyle = COL.cyl; g.lineWidth = 1.4; g.beginPath(); g.moveTo(0, FH / 2); g.lineTo(FW, FH / 2); g.moveTo(FW / 2, 0); g.lineTo(FW / 2, FH); g.stroke();
   g.strokeStyle = COL.seam; g.setLineDash([5, 4]); g.lineWidth = 1.5; g.strokeRect(0.75, -2, FW - 1.5, FH + 4); g.setLineDash([]);
 
@@ -501,7 +501,7 @@ function drawFlat() {
 // ---------------- readouts / notes ----------------
 const NOTES = {
   merc: "<b>Mercator: no light source.</b> Height ln tan(45° + φ/2). Angles true; lengths stretch by sec φ.",
-  central: "<b>Light at the centre.</b> Height tan φ. Runs off the cylinder past about 72°.",
+  central: "<b>Light at the center.</b> Height tan φ. Runs off the cylinder past about 72°.",
   lambert: "<b>Rays out from the axis.</b> Height sin φ. Areas true; shapes squashed toward the poles.",
 };
 function updateReadout() {
@@ -555,7 +555,7 @@ function faceSheet() {
   let dy = to.yaw - from.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
   tween(900, k => { const e = ease(k); cam.yaw = from.yaw + dy * e; cam.pitch = from.pitch + (to.pitch - from.pitch) * e; cam.dist = from.dist + (to.dist - from.dist) * e; camera.up.copy(u0).lerp(u1, e).normalize(); placeCamera(); }, "camera");
 }
-// Move a country: turn the globe so the country's centre lands on target t (cylinder lon/lat), north kept up
+// Move a country: turn the globe so the country's center lands on target t (cylinder lon/lat), north kept up
 async function moveCountryTo(t) {
   if (!HI.poly || S.busy) return;
   S.busy = true;

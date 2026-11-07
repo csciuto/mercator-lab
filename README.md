@@ -7,7 +7,7 @@ follow along.
 
 - **Routes:** search a city (6,000+ of 100,000 people or more) or type coordinates (`42.36, -71.06`,
   `42.36N 71.06W`, `42°21′36″N 71°3′36″W`), or click the globe or the wall map. Each route shows its distance in
-  miles, kilometres and nautical miles and the course to steer; a rhumb line paired with its great circle shows
+  miles, kilometers and nautical miles and the course to steer; a rhumb line paired with its great circle shows
   how much longer it is.
 - **Globe and cylinder:** turn either one, or both. Tilt the cylinder for transverse, oblique or polar Mercator,
   or switch to other cylindrical projections. Set how see-through the globe is.
