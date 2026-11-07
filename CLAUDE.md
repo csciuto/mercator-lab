@@ -10,11 +10,12 @@ Commit and push freely once tests pass.
 
 - Static site, no build step and no framework unless there's a real need. `.github/workflows/deploy.yml` runs every test on each push to `main`, stamps the version (`v1.<commits>`, replacing `dev` in each page's `.version`) and only then publishes to https://corey.sciu.to/mercator-lab/.
 - Math lives in pure files (`geo.js`, `sphere.js`, `lines.js`) loaded as classic scripts and exported for Node with `module.exports`. Test it in `tests/*.test.js`; keep DOM and d3/three out of those files.
-- One view, on purpose: it used to be two (a 2D Routes map and Unroll the globe) and they were merged. Add to
-  this view rather than starting a second one.
-- At Unroll the 3D stage is the wall map (the side map hides, clicks land on the sheet). Don't show the same map
-  twice.
-- Routes travel in the address (`#lines=…`); the app rewrites it whenever they change.
+- One view, Mercator only, built to the spec the user validated (steps Globe → Cylinder → Project → Unroll;
+  routes always drawn both ways; Reset keeps routes). Add to this view rather than starting a second one.
+- At Unroll the 3D stage is the wall map. There is no separate 2D map; don't add one.
+- Nothing is projected onto the cylinder before Project.
+- The side panel fits 1280 × 800 without scrolling (tested). Keep it that way when adding controls.
+- Routes travel in the address (`#routes=…`; old `#lines=` still read); the app rewrites it whenever they change.
 - Keep `npm run test:all` passing: unit tests (`npm test`), then browser tests at desktop and phone size with axe accessibility checks (`npm run test:e2e`). Tag desktop-only browser tests `@desktop`.
 - Visible text: labels, not sentences. Explanations go on `help.html`.
 - New pages need the footer line (help, contact, `.version`) and an entry in `e2e/a11y.spec.js`.

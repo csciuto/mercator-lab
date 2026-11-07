@@ -30,15 +30,17 @@ test('search: names that start with the query first, biggest first, accents igno
   assert.deepEqual(G.searchPlaces(PLACES, '  '), []);
 });
 
-test('the rhumb line says how much longer it is than its great circle', () => {
-  const BOS = [-71.06, 42.36], MOS = [37.62, 55.76];
-  const gc = { type: 'gc', a: BOS, b: MOS }, rh = { type: 'rh', a: MOS, b: BOS };  // reversed still pairs
-  assert.equal(G.partnerOf([gc, rh], rh), gc);
-  assert.match(G.extraLabel([gc, rh], rh), /^\+4\d\d mi · \+7\d\d km \(11%\) over the great circle$/);
-  assert.equal(G.extraLabel([gc, rh], gc), '');                  // shown once, on the rhumb line
-  assert.equal(G.extraLabel([rh], rh), '');                      // no partner, nothing to compare
-  const eq = [{ type: 'gc', a: [0, 0], b: [30, 0] }, { type: 'rh', a: [0, 0], b: [30, 0] }];
-  assert.equal(G.extraLabel(eq, eq[1]), 'Same as the great circle');
+test('a route has both distances, and the rhumb line is never shorter', () => {
+  const r = G.routeStats([-71.06, 42.36], [12.5, 41.9]);                  // Boston to Rome
+  assert.ok(Math.abs(r.gc - 6586) < 10, String(r.gc));
+  assert.ok(r.rh > r.gc && r.extraPct > 4 && r.extraPct < 5.5, String(r.extraPct));
+  assert.ok(Math.abs(G.routeStats([0, 0], [30, 0]).extraPct) < 1e-9);    // along the equator they agree
+  assert.ok(G.routeStats([-0.13, 51.51], [139.69, 35.69]).extraPct > 15); // London to Tokyo
+});
+
+test('a click names the nearest city within reach, or nothing', () => {
+  assert.equal(G.nearestPlace(PLACES, [-71.0, 42.3], 50)[0].includes('Boston'), true);
+  assert.equal(G.nearestPlace(PLACES, [-40, 30], 50), null);              // mid-Atlantic
 });
 
 test('points are named from the labeled cities, then the search list', () => {

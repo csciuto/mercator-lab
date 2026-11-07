@@ -24,12 +24,18 @@ test('moving a country takes its point exactly to the target', () => {
   near(got[0], t[0]); near(got[1], t[1]);
 });
 
-test('cylinder heights invert, and Mercator matches psi', () => {
-  for (const mode of ['merc', 'central', 'lambert']) {
-    for (const lat of [-60, -10, 0, 25, 70]) near(S.cylLat(mode, S.cylH(mode, rad(lat))), rad(lat), 1e-12);
-  }
-  near(S.cylH('merc', rad(45)), psi(rad(45)));
+test('Mercator heights invert and match psi', () => {
+  for (const lat of [-60, -10, 0, 25, 70]) near(S.cylLat(S.cylH(rad(lat))), rad(lat), 1e-12);
+  near(S.cylH(rad(45)), psi(rad(45)));
   near(S.MAXH, psi(rad(MAXLAT)));
+});
+
+test('says where the cylinder touches the globe', () => {
+  const M = (G, C) => S.mmul(S.mT(C), G);
+  assert.equal(S.touchLabel(S.ident()), 'Touches along the equator');
+  assert.equal(S.touchLabel(M(S.d3R(40, 0, 0), S.ident())), 'Touches along the equator');      // spinning the Earth doesn't change it
+  assert.match(S.touchLabel(M(S.ident(), S.d3R(0, 0, -90))), /^Touches along the \d+°[EW]? ?meridian$|^Touches along the 0° meridian$/);
+  assert.equal(S.touchLabel(M(S.ident(), S.d3R(0, 0, -45))), 'Touches along a circle 45° off the equator');
 });
 
 test('orthonormalize leaves a rotation a rotation', () => {

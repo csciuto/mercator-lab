@@ -6,7 +6,7 @@
     "test": "node --test 'tests/*.test.js'",
     "test:e2e": "playwright test",
     "test:all": "npm test && npm run test:e2e",
-    "screenshot": "UPDATE_PREVIEW=1 playwright test e2e/smoke.spec.js --project=desktop -g 'app loads'"
+    "screenshot": "UPDATE_PREVIEW=1 playwright test e2e/smoke.spec.js --project=desktop -g 'opens on a plain globe'"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",

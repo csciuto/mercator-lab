@@ -119,23 +119,21 @@ function searchPlaces(places, q, n) {
   return starts.concat(contains).slice(0, n);
 }
 
-// ---- the other type of line between the same two points (either direction), or null
-function samePt(p, q) { return Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6; }
-function partnerOf(lines, L) {
-  for (var i = 0; i < lines.length; i++) {
-    var o = lines[i];
-    if (o.type !== L.type && ((samePt(o.a, L.a) && samePt(o.b, L.b)) || (samePt(o.a, L.b) && samePt(o.b, L.a)))) return o;
+// the closest place within maxKm of c ([name, where, lat, lon] rows), or null
+function nearestPlace(places, c, maxKm) {
+  var best = null, bd = maxKm;
+  for (var i = 0; i < places.length; i++) {
+    var p = places[i];
+    if (Math.abs(p[2] - c[1]) > 2) continue; // cheap latitude filter: 2° ≈ 220 km
+    var d = gcDist(c, [p[3], p[2]]);
+    if (d <= bd) { bd = d; best = p; }
   }
-  return null;
+  return best;
 }
-// on a rhumb line with a great-circle partner: "+480 mi · +773 km (11%) over the great circle"
-function extraLabel(lines, L) {
-  if (L.type !== "rh") return "";
-  var o = partnerOf(lines, L);
-  if (!o) return "";
-  var g = gcDist(o.a, o.b), r = rhumb(L.a, L.b).d, x = r - g;
-  if (x < 0.05) return "Same as the great circle";
-  return "+" + fmtNum(x * KM_MI, x) + " mi · +" + fmtNum(x, x) + " km (" + Math.round(x / g * 100) + "%) over the great circle";
+// both distances for a route, and how much longer the rhumb line is (percent of the great circle)
+function routeStats(a, b) {
+  var g = gcDist(a, b), r = rhumb(a, b).d;
+  return { gc: g, rh: r, extraPct: g > 0.05 ? (r - g) / g * 100 : 0 };
 }
 
-if (typeof module !== 'undefined') module.exports = { parseCoord, searchPlaces, partnerOf, extraLabel, R_KM, KM_MI, KM_NM, MAXLAT, rad, deg, wrapRad, wrapLon, psi, gcDist, gcBearing, gcInterp, rhumb, rhumbAt, rhumbPoints, lineDist, lineBearing, lineAt, fmtNum, distLabel, fmtLL, clampCoord, panToRotation, nearest, placeLabels };
+if (typeof module !== 'undefined') module.exports = { routeStats, nearestPlace, parseCoord, searchPlaces, R_KM, KM_MI, KM_NM, MAXLAT, rad, deg, wrapRad, wrapLon, psi, gcDist, gcBearing, gcInterp, rhumb, rhumbAt, rhumbPoints, lineDist, lineBearing, lineAt, fmtNum, distLabel, fmtLL, clampCoord, panToRotation, nearest, placeLabels };

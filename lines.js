@@ -22,4 +22,28 @@ function linesFromHash(hash) {
 }
 function linesHash(lines) { return "#lines=" + encodeLines(lines); }
 
-if (typeof module !== "undefined") module.exports = { encodeLines, decodeLines, linesFromHash, linesHash };
+// Routes (each drawn both ways) in the address: #routes=lon,lat,lon,lat;...
+// Old #lines= links still open: their great-circle/rhumb pairs collapse to one route.
+function encodeRoutes(routes) {
+  return routes.map(function (r) { return [r.a[0], r.a[1], r.b[0], r.b[1]].map(function (v) { return +v.toFixed(4); }).join(","); }).join(";");
+}
+function routesHash(routes) { return "#routes=" + encodeRoutes(routes); }
+function routesFromHash(hash) {
+  var m = /(?:^#|&)routes=([^&]*)/.exec(hash || ""), list;
+  if (m) {
+    list = decodeURIComponent(m[1]).split(";").map(function (part) {
+      var v = part.split(",").map(Number);
+      if (v.length !== 4 || v.some(function (x) { return !isFinite(x); })) return null;
+      return { a: clampCoord([v[0], v[1]]), b: clampCoord([v[2], v[3]]) };
+    }).filter(Boolean);
+  } else {
+    var old = linesFromHash(hash);
+    if (!old) return null;
+    list = old.map(function (L) { return { a: L.a, b: L.b }; });
+  }
+  var key = function (r) { return [r.a, r.b].map(function (c) { return c.map(function (v) { return v.toFixed(3); }).join(","); }).sort().join("|"); };
+  var seen = {};
+  return list.filter(function (r) { var k = key(r); if (seen[k]) return false; seen[k] = 1; return true; });
+}
+
+if (typeof module !== "undefined") module.exports = { encodeLines, decodeLines, linesFromHash, linesHash, encodeRoutes, routesHash, routesFromHash };

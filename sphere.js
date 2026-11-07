@@ -63,18 +63,22 @@ function fromThree(t) { return [t[2], t[0], t[1]]; }
 function matToThree(R) { return mmul(PM, mmul(R, mT(PM))); }
 function matFromThree(R) { return mmul(mT(PM), mmul(R, PM)); }
 
-// ---- cylinders ----
-// mode: "merc" (Mercator, not a real light source), "central" (light at the center), "lambert" (rays straight out from the axis)
-function latMax(mode) { return mode === "central" ? deg(Math.atan(MAXH)) : mode === "lambert" ? 90 : MAXLAT; }
-function cylH(mode, phi) {
-  if (mode === "central") return Math.tan(phi);
-  if (mode === "lambert") return Math.sin(phi);
-  return psi(phi);
-}
-function cylLat(mode, h) {
-  if (mode === "central") return Math.atan(h);
-  if (mode === "lambert") return Math.asin(Math.max(-1, Math.min(1, h)));
-  return 2 * Math.atan(Math.exp(h)) - Math.PI / 2;
+// ---- the Mercator cylinder ----
+// height on the cylinder for latitude φ (radians), and back
+function cylH(phi) { return psi(phi); }
+function cylLat(h) { return 2 * Math.atan(Math.exp(h)) - Math.PI / 2; }
+// Where the cylinder touches the globe, given M (globe → cylinder frame). The cylinder's equator is that circle.
+function touchLabel(M) {
+  var ax = mv(mT(M), [0, 0, 1]);                         // cylinder axis in Earth coordinates
+  var tilt = deg(Math.acos(Math.min(1, Math.abs(ax[2])))); // 0 = axis through the poles
+  if (tilt < 0.5) return "Touches along the equator";
+  if (tilt > 89.5) {
+    var lon = wrapLon(deg(Math.atan2(ax[1], ax[0])) + 90);
+    if (lon > 90) lon -= 180; else if (lon <= -90) lon += 180;
+    var r = Math.round(lon);
+    return "Touches along the " + (r === 0 ? "0°" : Math.abs(r) + "°" + (r > 0 ? "E" : "W")) + " meridian";
+  }
+  return "Touches along a circle " + Math.round(tilt) + "° off the equator";
 }
 // point on the unit cylinder (cylinder's own geo frame) for cylinder longitude θ and height h
 function cylPoint(theta, h) { return [Math.cos(theta), Math.sin(theta), h]; }
@@ -85,4 +89,4 @@ function flatPoint(theta, h) { return [1, theta, h]; }
 // Spin q onto the 0° meridian, slide it along that meridian to t's latitude, spin out to t's longitude.
 function moveRotation(q, t) { return mmul(Rz(rad(t[0])), mmul(Ry(rad(t[1] - q[1])), Rz(rad(-q[0])))); }
 
-if (typeof module !== 'undefined') module.exports = { MAXH, vec, lonlat, mmul, mT, mv, ident, Rz, Ry, Rx, d3R, euler, axisAngle, orthonormalize, toThree, fromThree, matToThree, matFromThree, latMax, cylH, cylLat, cylPoint, flatPoint, moveRotation };
+if (typeof module !== 'undefined') module.exports = { MAXH, vec, lonlat, mmul, mT, mv, ident, Rz, Ry, Rx, d3R, euler, axisAngle, orthonormalize, toThree, fromThree, matToThree, matFromThree, cylH, cylLat, touchLabel, cylPoint, flatPoint, moveRotation };

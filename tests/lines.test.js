@@ -2,7 +2,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 global.clampCoord = require('../geo.js').clampCoord;  // lines.js expects geo.js loaded first, as in the pages
-const { encodeLines, decodeLines, linesFromHash, linesHash } = require('../lines.js');
+const { encodeLines, decodeLines, linesFromHash, linesHash, routesHash, routesFromHash } = require('../lines.js');
+global.linesFromHash = linesFromHash;
 
 const BOS = [-71.06, 42.36], MOS = [37.62, 55.76];
 
@@ -32,4 +33,14 @@ test('reads routes alongside other address parts, URL-escaped or not', () => {
   const h = linesHash([{ type: 'gc', a: BOS, b: MOS }]);
   assert.equal(linesFromHash('#x=1&' + h.slice(1)).length, 1);
   assert.equal(linesFromHash('#lines=' + encodeURIComponent('gc:1,2,3,4')).length, 1);
+});
+
+test('routes round-trip; old #lines= links collapse their pairs into one route', () => {
+  const r = routesFromHash(routesHash([{ a: BOS, b: MOS }, { a: [151.2093, -33.8688], b: [-0.1276, 51.5072] }]));
+  assert.equal(r.length, 2);
+  assert.ok(Math.abs(r[0].a[0] - BOS[0]) < 1e-9 && Math.abs(r[1].b[1] - 51.5072) < 1e-9);
+  assert.equal(routesFromHash(''), null);
+  assert.deepEqual(routesFromHash('#routes='), []);
+  assert.equal(routesFromHash('#lines=gc:-71.06,42.36,37.62,55.76;rh:37.62,55.76,-71.06,42.36').length, 1);
+  assert.equal(routesFromHash('#routes=1,2,3;4,5,6,7').length, 1);
 });
