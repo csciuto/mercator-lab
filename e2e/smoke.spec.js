@@ -126,7 +126,7 @@ test('Cylinder shows an empty cylinder; Project puts the map on it; Globe takes 
   expect(c.wire + c.coast).toBe(0);
 });
 
-test('Unroll: the map faces you and a click adds a point; Reset goes back but keeps routes @desktop', async ({ page }) => {
+test('Unroll: the map faces you and a click adds a point; Reset stays on Unroll and keeps routes @desktop', async ({ page }) => {
   await page.goto(APP + BOS_ROM);
   await page.locator('#st3').click(); await idle(page);
   for (const c of [[151.21, -33.87], [-70.67, -33.45]]) {
@@ -137,11 +137,12 @@ test('Unroll: the map faces you and a click adds a point; Reset goes back but ke
   await expect(page.locator(ROUTE).last()).toContainText('Sydney');
   await page.locator('#g0').fill('40'); await page.locator('#freeze').click();
   await page.locator('#reset').click(); await idle(page);
-  const S = await page.evaluate(() => ({ step: window.__lab.S.step, cylOn: window.__lab.S.cylOn, A: window.__lab.S.A, G: window.__lab.S.G }));
-  expect(S.step).toBe(0);
-  expect(S.cylOn).toBe(false);
+  const S = await page.evaluate(() => ({ step: window.__lab.S.step, s: window.__lab.S.s, A: window.__lab.S.A, G: window.__lab.S.G }));
+  expect(S.step).toBe(3);
+  expect(S.s).toBe(2);
   expect(S.A).toBe(null);
   expect(Math.abs(S.G[0][0] - 1)).toBeLessThan(1e-6);
+  await expect(page.locator('#st3')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator(ROUTE)).toHaveCount(2);
 });
 

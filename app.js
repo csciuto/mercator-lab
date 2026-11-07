@@ -633,13 +633,13 @@ $("move").onclick = () => arm(!S.armed);
 $("putBack").onclick = putBack;
 $("freeze").onclick = () => { freeze(); showCylinder(); };
 $("clearA").onclick = () => { S.A = null; dirty = true; };
-// Reset: everything back to the start except the routes
-$("reset").onclick = () => {
+// Reset: this step's starting state (globe, cylinder, view, opacity, frozen map, moved country); step and routes stay
+$("reset").onclick = async () => {
   arm(false); S.A = null; S.from = null; $("from").value = ""; $("to").value = "";
   if (S.moved) { S.moved = null; routesVer++; renderRoutes(); }
   S.globeOpacity = 0.55; $("opacity").value = 55; $("opo").textContent = "55%";
-  animateTo(ident(), ident(), 700);
-  setStep(0).then(() => cameraTo(CAM0, [0, 1, 0], 500));
+  if (S.step === 3) { await animateTo(ident(), ident(), 700); faceSheet(); }
+  else { animateTo(ident(), ident(), 700); cameraTo({ ...CAM0, dist: S.step === 0 ? CAM0.dist : CAMCYL }, [0, 1, 0], 700); }
 };
 window.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
