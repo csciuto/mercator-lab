@@ -160,7 +160,10 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
   <main>
     <section id="bench" aria-label="3D globe and cylinder">
       <div class="overlay">
+        <div class="grp" style="flex-wrap:wrap;gap:6px 16px">
         <label class="inl" for="opacity">Globe opacity <input type="range" id="opacity" min="0" max="100" step="1" value="55"><output id="opo">55%</output></label>
+        <label class="inl cylOnly" for="mapOpacity">Map opacity <input type="range" id="mapOpacity" min="0" max="100" step="1" value="85"><output id="mapo">85%</output></label>
+        </div>
         <div class="hint" id="dragHint"></div>
       </div>
       <div class="legend">

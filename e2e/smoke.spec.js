@@ -117,9 +117,13 @@ test('Project brings the cylinder with the map on it; Globe takes both away', as
   let c = await counts(page);
   expect(c.wire).toBeGreaterThan(0);
   expect(c.coast).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.__lab.map())).toEqual({ visible: true, opacity: 0.85 });   // filled map
+  await page.locator('#mapOpacity').fill('30');
+  expect((await page.evaluate(() => window.__lab.map())).opacity).toBeCloseTo(0.3);
   await page.locator('#pr-trans').click(); await idle(page);
   await expect(page.locator('#touch')).toHaveText('Touches along the 0° meridian');
   await page.locator('#st0').click(); await idle(page);
+  expect((await page.evaluate(() => window.__lab.map())).visible).toBe(false);   // no fill without the cylinder
   c = await counts(page);
   expect(c.wire + c.coast).toBe(0);
   await page.locator('#pr-obl').click(); await idle(page);   // turning the cylinder at Globe projects

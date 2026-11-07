@@ -29,7 +29,7 @@ const SRC = {
   eq: toVecs([parallel(0), meridian(0)]),
   hi: [],
 };
-let HI = { name: "", centroid: [0, 0] };
+let HI = { name: "", centroid: [0, 0], poly: null };
 function setCountry(name) {
   const f = FEATURES.find(f => f.properties.name.toLowerCase() === name.toLowerCase());
   if (!f) return false;
@@ -37,7 +37,8 @@ function setCountry(name) {
   // keep the largest part (contiguous US, mainland France...)
   let best = polys[0], bestA = -1;
   for (const p of polys) { const a = d3.geoArea({ type: "Polygon", coordinates: p }); if (a < 2 * Math.PI && a > bestA) { bestA = a; best = p; } }
-  HI = { name: f.properties.name, centroid: d3.geoCentroid({ type: "Polygon", coordinates: best }) };
+  HI = { name: f.properties.name, centroid: d3.geoCentroid({ type: "Polygon", coordinates: best }), poly: { type: "Polygon", coordinates: best } };
+  mapKey = "";
   SRC.hi = toVecs(best);
   dirty = true;
   return true;
@@ -49,7 +50,7 @@ $("countries").innerHTML = FEATURES.map(f => f.properties.name).sort().map(n => 
 const S = {
   G: ident(), C: ident(),   // globe and cylinder rotations, geo frame
   step: 0, s: 0, cylOn: false,
-  globeOpacity: 0.55,
+  globeOpacity: 0.55, mapOpacity: 0.85,
   routes: [], from: null,   // from: {c, name} waiting for a To
   A: null,                  // frozen map: projected segments on the cylinder
   moved: null,              // {G0}: the globe before a country was moved
@@ -159,6 +160,45 @@ const cylStatics = [cylSurface];
   const s = label("seam", COL.seam, 0.36); s.position.set(0, MAXH + 0.2, -1); cyl.add(s); cylStatics.push(s);
   const m = label("map center", COL.cyl, 0.36); m.position.set(0, MAXH + 0.2, 1); cyl.add(m); cylStatics.push(m);
 })();
+
+// filled map on the cylinder and the wall map: a Mercator picture of the map as it sits now, redrawn when it changes
+const BORDERS = topojson.mesh(WORLD, WORLD.objects.countries, (a, b) => a !== b);
+const mapCanvas = document.createElement("canvas"); mapCanvas.width = 1024; mapCanvas.height = Math.round(1024 * MAXH / Math.PI);
+const mapTex = new THREE.CanvasTexture(mapCanvas); mapTex.anisotropy = 4;
+const mapMat = new THREE.MeshBasicMaterial({ map: mapTex, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, fog: false });
+const MAPN = [96, 32]; // grid of the sheet in θ and h
+const mapGeo = (() => {
+  const g = new THREE.BufferGeometry(), uv = [], idx = [], [NT, NH] = MAPN;
+  for (let j = 0; j <= NH; j++) for (let i = 0; i <= NT; i++) uv.push(i / NT, j / NH);
+  for (let j = 0; j < NH; j++) for (let i = 0; i < NT; i++) { const a = j * (NT + 1) + i, b = a + NT + 1; idx.push(a, a + 1, b, a + 1, b + 1, b); }
+  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array((NT + 1) * (NH + 1) * 3), 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+})();
+const mapMesh = new THREE.Mesh(mapGeo, mapMat); mapMesh.frustumCulled = false; mapMesh.renderOrder = -1; scene.add(mapMesh);
+let mapKey = "", mapDrawn = 0, mapTimer = 0;
+function drawMap(force) {
+  const base = S.moved && S.A ? S.A.M : M();
+  const key = JSON.stringify([base, M(), HI.name, !!S.moved]);
+  if (key === mapKey) return;
+  const now = performance.now();
+  if (!force && now - mapDrawn < 120) { clearTimeout(mapTimer); mapTimer = setTimeout(() => { dirty = true; drawMap(true); }, 130); return; } // at most ~8 redraws a second while dragging
+  mapKey = key; mapDrawn = now;
+  const W = mapCanvas.width, H = mapCanvas.height, g = mapCanvas.getContext("2d");
+  const proj = R => d3.geoMercator().rotate(euler(R)).scale(W / (2 * Math.PI)).translate([W / 2, H / 2]).precision(0.5).clipExtent([[0, 0], [W, H]]);
+  g.fillStyle = "#1f4552"; g.fillRect(0, 0, W, H);
+  const p = d3.geoPath(proj(base), g);
+  g.beginPath(); p(LANDGEO); g.fillStyle = "#d9cfb4"; g.fill();
+  g.beginPath(); p(BORDERS); g.strokeStyle = "rgba(40,40,30,0.45)"; g.lineWidth = 0.8; g.stroke();
+  if (HI.poly) { const q = d3.geoPath(proj(M()), g); g.beginPath(); q(HI.poly); g.fillStyle = S.moved ? "rgba(255,122,89,0.75)" : "rgba(255,122,89,0.35)"; g.fill(); }
+  mapTex.needsUpdate = true;
+}
+function placeMap(s) {
+  const a = mapGeo.attributes.position.array, [NT, NH] = MAPN, u = ease(Math.max(0, Math.min(1, s - 1)));
+  for (let j = 0, o = 0; j <= NH; j++) for (let i = 0; i <= NT; i++, o += 3) cylWorld(-Math.PI + 2 * Math.PI * i / NT, -MAXH + 2 * MAXH * j / NH, u, S.C, a, o);
+  mapGeo.attributes.position.needsUpdate = true;
+}
 
 // dynamic line layers ----
 function dynLines(color, opacity, max = 120000) {
@@ -379,6 +419,10 @@ function rebuild() {
   cylStatics.forEach(o => { o.visible = u < 0.02; });
 
   const on = S.cylOn;
+  // the fill fades in over the second half of Project
+  const fill = on ? S.mapOpacity * Math.max(0, Math.min(1, (s - 0.5) * 2)) : 0;
+  mapMesh.visible = fill > 0.001; mapMat.opacity = fill;
+  if (mapMesh.visible) { drawMap(); placeMap(s); }
   writeLines(L.wire, scratch, on ? placeOnCyl(WIRE.w, s, Cg, scratch) : 0);
   writeLines(L.wireHi, scratch, on ? placeOnCyl(WIRE.hi, s, Cg, scratch) : 0);
   writeLines(L.seam, scratch, on ? placeOnCyl(WIRE.seam, s, Cg, scratch) : 0);
@@ -493,7 +537,7 @@ function showCylinder() { if (S.step === 0) setStep(2); }
 // ---------------- country, freeze ----------------
 function freeze() {
   const Mr = M(), segsOf = lines => projectLines(lines, Mr).segs;
-  S.A = { coast: segsOf(SRC.coast), eq: segsOf(SRC.eq), hi: segsOf(SRC.hi) };
+  S.A = { M: Mr, coast: segsOf(SRC.coast), eq: segsOf(SRC.eq), hi: segsOf(SRC.hi) };
   dirty = true;
 }
 // turn the globe so the country's center lands on t (cylinder lon/lat), north kept up; the map before stays frozen
@@ -626,6 +670,7 @@ for (const i of [0, 2, 3]) $("st" + i).onclick = () => setStep(i);
 $("pr-normal").onclick = () => { showCylinder(); animateTo(S.G, ident()); };
 $("pr-trans").onclick = () => { showCylinder(); animateTo(S.G, d3R(0, 0, -90)); };
 $("pr-obl").onclick = () => { showCylinder(); animateTo(S.G, d3R(0, 0, -45)); };
+$("mapOpacity").addEventListener("input", e => { S.mapOpacity = +e.target.value / 100; $("mapo").textContent = e.target.value + "%"; dirty = true; });
 $("opacity").addEventListener("input", e => { S.globeOpacity = +e.target.value / 100; $("opo").textContent = e.target.value + "%"; dirty = true; });
 $("clearRoutes").onclick = () => { S.routes = []; S.from = null; $("from").value = ""; $("to").value = ""; routesChanged(); };
 $("country").addEventListener("change", e => { if (!setCountry(e.target.value)) e.target.value = HI.name; });
@@ -638,6 +683,7 @@ $("reset").onclick = async () => {
   arm(false); S.A = null; S.from = null; $("from").value = ""; $("to").value = "";
   if (S.moved) { S.moved = null; routesVer++; renderRoutes(); }
   S.globeOpacity = 0.55; $("opacity").value = 55; $("opo").textContent = "55%";
+  S.mapOpacity = 0.85; $("mapOpacity").value = 85; $("mapo").textContent = "85%";
   if (S.step === 3) { await animateTo(ident(), ident(), 700); faceSheet(); }
   else { animateTo(ident(), ident(), 700); cameraTo({ ...CAM0, dist: S.step === 0 ? CAM0.dist : CAMCYL }, [0, 1, 0], 700); }
 };
@@ -670,4 +716,5 @@ window.addEventListener("DOMContentLoaded", () => requestAnimationFrame(frame));
 window.__lab = { S, M, hi: () => HI, globe: () => ({ opacity: globeMat.opacity, depthWrite: globeMat.depthWrite }),
   screenOf: p => { scene.updateMatrixWorld(); const v = new THREE.Vector3(...p).project(camera), r = cv.getBoundingClientRect(); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height]; },
   idle: () => running === 0 && !dirty, freeze, moveCountryTo, putBack, setStep, setCountry, animateTo,
+  map: () => ({ visible: mapMesh.visible, opacity: mapMat.opacity }),
   counts: () => Object.assign(Object.fromEntries(Object.entries(L).map(([k, o]) => [k, o.geometry.drawRange.count])), { routes: routeGroup.children.length }) };
