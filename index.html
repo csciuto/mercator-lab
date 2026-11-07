@@ -78,6 +78,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 0; }
 #bench { position: relative; min-width: 0; min-height: 0; }
+.pane { position: absolute; border: 1px solid var(--line); pointer-events: none; box-sizing: border-box; }
+.pane.sel { border: 2px solid var(--cyl); }
+.pane button { position: absolute; right: 10px; top: 10px; pointer-events: auto; font: 500 12px var(--f-body); color: var(--ink); background: rgba(17,27,32,.88); border: 1px solid var(--line); border-radius: 5px; padding: 5px 9px; cursor: pointer; }
+.pane.sel button { border-color: var(--cyl); color: var(--cyl); }
+#compare[aria-pressed="true"] { border-color: var(--cyl); color: var(--cyl); }
+#routes .along { margin-top: 4px; font: 500 11.5px var(--f-body); color: var(--cyl); background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 2px 7px; cursor: pointer; }
+#routes .along:hover { border-color: var(--cyl); }
 #bench canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .overlay { position: absolute; left: 16px; top: 14px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; max-width: calc(100% - 32px); }
 .overlay > * { pointer-events: auto; }
@@ -152,6 +159,7 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
       <button id="st2" aria-pressed="false">Project</button>
       <button id="st3" aria-pressed="false">Unroll</button>
     </span>
+    <button class="btn" id="compare" aria-pressed="false" title="Two views side by side, each with its own cylinder">Compare</button>
     <span class="spacer"></span>
     <button class="btn" id="reset" title="Back to this step's start; routes stay">Reset</button>
     <a class="btn" id="help" href="help.html">Help</a>
@@ -159,20 +167,21 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
 
   <main>
     <section id="bench" aria-label="3D globe and cylinder">
-      <div class="overlay">
+      <div class="overlay" id="overlay">
         <div class="grp" style="flex-wrap:wrap;gap:6px 16px">
         <label class="inl" for="opacity">Globe opacity <input type="range" id="opacity" min="0" max="100" step="1" value="55"><output id="opo">55%</output></label>
         <label class="inl cylOnly" for="mapOpacity">Map opacity <input type="range" id="mapOpacity" min="0" max="100" step="1" value="85"><output id="mapo">85%</output></label>
         </div>
         <div class="hint" id="dragHint"></div>
       </div>
+      <div class="pane" id="paneA" hidden><button aria-pressed="false">A</button></div>
+      <div class="pane" id="paneB" hidden><button aria-pressed="true">B</button></div>
       <div class="legend">
         <span><i class="sw earth"></i>Earth's grid</span>
         <span class="cylOnly"><i class="sw cyl"></i>Cylinder</span>
         <span class="cylOnly"><i class="sw seam"></i>Seam</span>
         <span><i class="sw gcl"></i>Great circle</span>
         <span><i class="sw rhl"></i>Rhumb line</span>
-        <span id="lgA" hidden><i class="sw a"></i>Frozen map</span>
       </div>
     </section>
 
@@ -201,7 +210,7 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
       </div>
 
       <div class="sec" id="cylSec">
-        <h2><span class="dot" style="background:var(--cyl)"></span>Cylinder</h2>
+        <h2><span class="dot" style="background:var(--cyl)"></span>Cylinder<span id="cylWhich"></span></h2>
         <span class="seg" role="group" aria-label="Cylinder presets">
           <button id="pr-normal">Normal</button>
           <button id="pr-trans">Transverse</button>
@@ -211,10 +220,6 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
         <div class="slider"><label for="c1">Tilt</label><input type="range" id="c1" min="-90" max="90" step="0.5" value="0"><output id="c1o">0°</output></div>
         <div class="slider"><label for="c2">Roll</label><input type="range" id="c2" min="-180" max="180" step="0.5" value="0"><output id="c2o">0°</output></div>
         <p class="note" id="touch">Touches along the equator</p>
-        <div class="row">
-          <button class="btn a" id="freeze" title="Keep a copy of the current map on the cylinder">Freeze</button>
-          <button class="btn" id="clearA" disabled>Unfreeze</button>
-        </div>
       </div>
 
       <footer class="sec foot">

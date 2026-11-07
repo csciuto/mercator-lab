@@ -29,7 +29,7 @@ test('opens on a plain globe: no cylinder, nothing projected @desktop', async ({
   await expect(page.locator('#bench canvas')).toBeVisible();
   await expect(page.locator(READY).first()).toBeVisible();
   const c = await counts(page);
-  expect(c.wire + c.coast + c.aCoast).toBe(0);
+  expect(c.wire + c.coast).toBe(0);
   expect(await page.evaluate(() => window.__lab.S.cylOn)).toBe(false);
   expect(errors).toEqual([]);
   if (process.env.UPDATE_PREVIEW) {
@@ -118,7 +118,7 @@ test('Project brings the cylinder with the map on it; Globe takes both away', as
   expect(c.wire).toBeGreaterThan(0);
   expect(c.coast).toBeGreaterThan(0);
   expect(await page.evaluate(() => window.__lab.map())).toEqual({ visible: true, opacity: 0.85 });   // filled map
-  await page.locator('#mapOpacity').fill('30');
+  await page.locator('#mapOpacity').fill('30'); await idle(page);
   expect((await page.evaluate(() => window.__lab.map())).opacity).toBeCloseTo(0.3);
   await page.locator('#pr-trans').click(); await idle(page);
   await expect(page.locator('#touch')).toHaveText('Touches along the 0° meridian');
@@ -139,24 +139,37 @@ test('Unroll: the map faces you and a click adds a point; Reset stays on Unroll 
   }
   await expect(page.locator(ROUTE)).toHaveCount(2);
   await expect(page.locator(ROUTE).last()).toContainText('Sydney');
-  await page.locator('#g0').fill('40'); await page.locator('#freeze').click();
+  await page.locator('#g0').fill('40');
   await page.locator('#reset').click(); await idle(page);
-  const S = await page.evaluate(() => ({ step: window.__lab.S.step, s: window.__lab.S.s, A: window.__lab.S.A, G: window.__lab.S.G }));
+  const S = await page.evaluate(() => ({ step: window.__lab.S.step, s: window.__lab.S.s, G: window.__lab.S.G }));
   expect(S.step).toBe(3);
   expect(S.s).toBe(2);
-  expect(S.A).toBe(null);
   expect(Math.abs(S.G[0][0] - 1)).toBeLessThan(1e-6);
   await expect(page.locator('#st3')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator(ROUTE)).toHaveCount(2);
 });
 
-test('Freeze keeps the map on the cylinder; Unfreeze removes it', async ({ page }) => {
+test('Compare: two views, each with its own cylinder; the selected one takes the Cylinder controls', async ({ page }) => {
   await page.goto(APP + BOS_ROM);
-  await page.locator('#st2').click(); await idle(page);
-  await page.locator('#freeze').click(); await idle(page);
-  expect((await counts(page)).aCoast).toBeGreaterThan(0);
-  await page.locator('#clearA').click(); await idle(page);
-  expect((await counts(page)).aCoast).toBe(0);
+  await page.locator('#compare').click(); await idle(page);
+  await expect(page.locator('#paneA button')).toBeVisible();
+  await expect(page.locator('#paneB')).toHaveClass(/sel/);
+  await page.locator('#pr-trans').click(); await idle(page);
+  await expect(page.locator('#paneA button')).toContainText('equator');
+  await expect(page.locator('#paneB button')).toContainText('0° meridian');
+  await page.locator('#paneA button').click();
+  await expect(page.locator('#paneA')).toHaveClass(/sel/);
+  await expect(page.locator('#touch')).toHaveText('Touches along the equator');
+  await page.locator('#st3').click(); await idle(page);
+  await page.locator('#compare').click(); await idle(page);
+  await expect(page.locator('#paneA')).toBeHidden();
+});
+
+test('Cylinder along this route: the cylinder touches along the route, so its great circle is straight', async ({ page }) => {
+  await page.goto(APP + BOS_ROM);
+  await page.locator('#routes .along').first().click(); await idle(page);
+  await expect(page.locator('#touch')).toHaveText('Touches along Boston → Rome');
+  await expect(page.locator('#st2')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('fits a phone: nothing scrolls sideways', async ({ page }) => {

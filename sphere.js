@@ -80,9 +80,26 @@ function touchLabel(M) {
   }
   return "Touches along a circle " + Math.round(tilt) + "° off the equator";
 }
+// The cylinder that touches the globe along the great circle through a and b (lon/lat), with the route's
+// midpoint at the map's center and a → b running east. G is the globe's rotation. Its map draws the great
+// circle as the straight center line.
+function alongRoute(G, a, b) {
+  var va = vec(a[0], a[1]), vb = vec(b[0], b[1]);
+  var n = [va[1] * vb[2] - va[2] * vb[1], va[2] * vb[0] - va[0] * vb[2], va[0] * vb[1] - va[1] * vb[0]];
+  var nn = Math.hypot(n[0], n[1], n[2]);
+  if (nn < 1e-9) return null; // same or opposite points: no single great circle
+  var m = [va[0] + vb[0], va[1] + vb[1], va[2] + vb[2]], mn = Math.hypot(m[0], m[1], m[2]);
+  var x = mv(G, m.map(function (v) { return v / mn; })), z = mv(G, n.map(function (v) { return v / nn; }));
+  var y = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]];
+  return [[x[0], y[0], z[0]], [x[1], y[1], z[1]], [x[2], y[2], z[2]]];
+}
+// is this route on the cylinder's equator (within tol degrees)? M: globe → cylinder frame
+function onCylEquator(M, a, b, tol) {
+  return [a, b].every(function (c) { return Math.abs(lonlat(mv(M, vec(c[0], c[1])))[1]) < (tol || 0.5); });
+}
 // point on the unit cylinder (cylinder's own geo frame) for cylinder longitude θ and height h
 function cylPoint(theta, h) { return [Math.cos(theta), Math.sin(theta), h]; }
 // same point after unrolling onto the plane tangent at θ = 0
 function flatPoint(theta, h) { return [1, theta, h]; }
 
-if (typeof module !== 'undefined') module.exports = { MAXH, vec, lonlat, mmul, mT, mv, ident, Rz, Ry, Rx, d3R, euler, axisAngle, orthonormalize, toThree, fromThree, matToThree, matFromThree, cylH, cylLat, touchLabel, cylPoint, flatPoint };
+if (typeof module !== 'undefined') module.exports = { MAXH, vec, lonlat, mmul, mT, mv, ident, Rz, Ry, Rx, d3R, euler, axisAngle, orthonormalize, toThree, fromThree, matToThree, matFromThree, cylH, cylLat, touchLabel, alongRoute, onCylEquator, cylPoint, flatPoint };

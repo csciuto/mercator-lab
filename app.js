@@ -30,14 +30,24 @@ const SRC = {
 // ---------------- state ----------------
 // step: 0 globe, 2 projected, 3 unrolled (the buttons; 1, an empty cylinder, is no longer offered). s: 0 on the globe → 1 on the cylinder → 2 flat (animated).
 const S = {
-  G: ident(), C: ident(),   // globe and cylinder rotations, geo frame
+  G: ident(),               // globe rotation, geo frame (each view's cylinder rotation is in panes)
   step: 0, s: 0, cylOn: false,
   globeOpacity: 0.55, mapOpacity: 0.85,
   routes: [], from: null,   // from: {c, name} waiting for a To
-  A: null,                  // frozen map: projected segments on the cylinder
-
+  compare: false, sel: "b", // two views side by side; which one the Cylinder controls edit
 };
 let dirty = true, routesVer = 0;
+// A view: its own cylinder, projection cache and map picture. B is the main view; A appears with Compare.
+function mkPane(id) {
+  const canvas = document.createElement("canvas"); canvas.width = 1024; canvas.height = Math.round(1024 * MAXH / Math.PI);
+  const tex = new THREE.CanvasTexture(canvas); tex.anisotropy = 4;
+  return { id, C: ident(), PB: null, PBkey: "", canvas, tex, mapKey: "", mapDrawn: 0, mapTimer: 0, rect: { x: 0, y: 0, w: 1, h: 1 } };
+}
+const panes = { a: mkPane("a"), b: mkPane("b") };
+let cur = panes.b;                // the view being drawn or handled; S.C is its cylinder
+Object.defineProperty(S, "C", { get: () => cur.C, set: v => { cur.C = v; } });
+function withPane(p, f) { const prev = cur; cur = p; try { return f(); } finally { cur = prev; } }
+const selPane = () => panes[S.compare ? S.sel : "b"];
 const M = () => mmul(mT(S.C), S.G); // the globe in the cylinder's frame: all the map depends on
 
 // ---------------- three.js scene ----------------
@@ -50,11 +60,13 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(new THREE.Color(COL.bg), 6, 16);
 const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
 const cam = { yaw: 0.55, pitch: 0.22, dist: 14 };
+const baseUp = new THREE.Vector3(0, 1, 0);
 const CAM0 = { yaw: 0.55, pitch: 0.22, dist: 6 }; // the globe alone
 const CAMCYL = 14;                                  // room for the cylinder
 Object.assign(cam, CAM0);
 function placeCamera() {
   camera.position.set(cam.dist * Math.sin(cam.yaw) * Math.cos(cam.pitch), cam.dist * Math.sin(cam.pitch), cam.dist * Math.cos(cam.yaw) * Math.cos(cam.pitch));
+  camera.up.copy(baseUp);
   camera.lookAt(0, 0, 0);
   scene.fog.near = cam.dist - 2; scene.fog.far = cam.dist + 6;
 }
@@ -144,9 +156,7 @@ const cylStatics = [cylSurface];
 
 // filled map on the cylinder and the wall map: a Mercator picture of the map as it sits now, redrawn when it changes
 const BORDERS = topojson.mesh(WORLD, WORLD.objects.countries, (a, b) => a !== b);
-const mapCanvas = document.createElement("canvas"); mapCanvas.width = 1024; mapCanvas.height = Math.round(1024 * MAXH / Math.PI);
-const mapTex = new THREE.CanvasTexture(mapCanvas); mapTex.anisotropy = 4;
-const mapMat = new THREE.MeshBasicMaterial({ map: mapTex, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, fog: false });
+const mapMat = new THREE.MeshBasicMaterial({ map: panes.b.tex, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, fog: false });
 const MAPN = [96, 32]; // grid of the sheet in θ and h
 const mapGeo = (() => {
   const g = new THREE.BufferGeometry(), uv = [], idx = [], [NT, NH] = MAPN;
@@ -158,20 +168,20 @@ const mapGeo = (() => {
   return g;
 })();
 const mapMesh = new THREE.Mesh(mapGeo, mapMat); mapMesh.frustumCulled = false; mapMesh.renderOrder = -1; scene.add(mapMesh);
-let mapKey = "", mapDrawn = 0, mapTimer = 0;
 function drawMap(force) {
   const base = M(), key = JSON.stringify(base);
-  if (key === mapKey) return;
+  const p = cur;
+  if (key === p.mapKey) return;
   const now = performance.now();
-  if (!force && now - mapDrawn < 120) { clearTimeout(mapTimer); mapTimer = setTimeout(() => { dirty = true; drawMap(true); }, 130); return; } // at most ~8 redraws a second while dragging
-  mapKey = key; mapDrawn = now;
-  const W = mapCanvas.width, H = mapCanvas.height, g = mapCanvas.getContext("2d");
+  if (!force && now - p.mapDrawn < 120) { clearTimeout(p.mapTimer); p.mapTimer = setTimeout(() => { withPane(p, () => drawMap(true)); dirty = true; }, 130); return; } // at most ~8 redraws a second while dragging
+  p.mapKey = key; p.mapDrawn = now;
+  const W = p.canvas.width, H = p.canvas.height, g = p.canvas.getContext("2d");
   const proj = R => d3.geoMercator().rotate(euler(R)).scale(W / (2 * Math.PI)).translate([W / 2, H / 2]).precision(0.5).clipExtent([[0, 0], [W, H]]);
   g.fillStyle = "#1f4552"; g.fillRect(0, 0, W, H);
-  const p = d3.geoPath(proj(base), g);
-  g.beginPath(); p(LANDGEO); g.fillStyle = "#d9cfb4"; g.fill();
-  g.beginPath(); p(BORDERS); g.strokeStyle = "rgba(40,40,30,0.45)"; g.lineWidth = 0.8; g.stroke();
-  mapTex.needsUpdate = true;
+  const path = d3.geoPath(proj(base), g);
+  g.beginPath(); path(LANDGEO); g.fillStyle = "#d9cfb4"; g.fill();
+  g.beginPath(); path(BORDERS); g.strokeStyle = "rgba(40,40,30,0.45)"; g.lineWidth = 0.8; g.stroke();
+  p.tex.needsUpdate = true;
 }
 function placeMap(s) {
   const a = mapGeo.attributes.position.array, [NT, NH] = MAPN, u = ease(Math.max(0, Math.min(1, s - 1)));
@@ -190,7 +200,6 @@ function dynLines(color, opacity, max = 120000) {
 const L = {
   wire: dynLines(COL.cyl, 0.26, 20000), wireHi: dynLines(COL.cyl, 0.95, 4000), seam: dynLines(COL.seam, 0.9, 2000),
   coast: dynLines(COL.b, 0.9), grat: dynLines(COL.earth, 0.3, 30000), eq: dynLines(COL.earth, 1, 4000), 
-  aCoast: dynLines(COL.a, 0.7), aEq: dynLines(COL.a, 0.9, 6000),
 };
 // routes are drawn as tubes so they stay visible on the busy cylinder; rebuilt whenever the scene changes
 const routeGroup = new THREE.Group(); scene.add(routeGroup);
@@ -355,8 +364,9 @@ function renderRoutes() {
   for (const r of S.routes) {
     const st = routeStats(r.a, r.b), li = document.createElement("li");
     const both = km => `${fmtNum(km, km)} km · ${fmtNum(km * KM_MI, km)} mi`;
-    li.innerHTML = `<span class="mbar"></span><div class="meta"><b></b><br><span class="g">Great circle ${both(st.gc)}</span><br><span class="r">Rhumb ${both(st.rh)}</span> <span class="x2">+${st.extraPct.toFixed(st.extraPct < 10 ? 1 : 0)}%</span></div><button class="x" aria-label="Remove route">×</button>`;
+    li.innerHTML = `<span class="mbar"></span><div class="meta"><b></b><br><span class="g">Great circle ${both(st.gc)}</span><br><span class="r">Rhumb ${both(st.rh)}</span> <span class="x2">+${st.extraPct.toFixed(st.extraPct < 10 ? 1 : 0)}%</span><br><button class="along" title="Turn the cylinder to touch the globe along this route: its great circle becomes a straight line">Cylinder along this route</button></div><button class="x" aria-label="Remove route">×</button>`;
     li.querySelector("b").textContent = `${r.an} → ${r.bn}`;
+    li.querySelector(".along").onclick = () => { const C = alongRoute(S.G, r.a, r.b); if (C) turnCylinder(C); };
     li.querySelector(".x").onclick = () => { S.routes = S.routes.filter(x => x !== r); routesChanged(); };
     ul.append(li);
   }
@@ -373,14 +383,14 @@ function pickPoint(c, name) {
 function clickName(c) { const p = nearestPlace(PLACES, c, 50); return p ? p[0] : fmtLL(c); }
 
 // ---------------- draw ----------------
-let PB = null, PBkey = "";
 function rebuild() {
   const Mr = M();
   const key = JSON.stringify(Mr);
-  if (key !== PBkey) {
-    PB = { coast: projectLines(SRC.coast, Mr), grat: projectLines(SRC.grat, Mr), eq: projectLines(SRC.eq, Mr) };
-    PBkey = key;
+  if (key !== cur.PBkey) {
+    cur.PB = { coast: projectLines(SRC.coast, Mr), grat: projectLines(SRC.grat, Mr), eq: projectLines(SRC.eq, Mr) };
+    cur.PBkey = key;
   }
+  const PB = cur.PB;
   const s = S.s, Gg = S.G, Cg = S.C;
   setObjMatrix(globe, Gg); setObjMatrix(cyl, Cg);
 
@@ -399,7 +409,7 @@ function rebuild() {
   // the fill fades in over the second half of Project
   const fill = on ? S.mapOpacity * Math.max(0, Math.min(1, (s - 0.5) * 2)) : 0;
   mapMesh.visible = fill > 0.001; mapMat.opacity = fill;
-  if (mapMesh.visible) { drawMap(); placeMap(s); }
+  if (mapMesh.visible) { drawMap(); placeMap(s); mapMat.map = cur.tex; }
   writeLines(L.wire, scratch, on ? placeOnCyl(WIRE.w, s, Cg, scratch) : 0);
   writeLines(L.wireHi, scratch, on ? placeOnCyl(WIRE.hi, s, Cg, scratch) : 0);
   writeLines(L.seam, scratch, on ? placeOnCyl(WIRE.seam, s, Cg, scratch) : 0);
@@ -411,10 +421,6 @@ function rebuild() {
   writeLines(L.eq, scratch, whole ? placeLive(PB.eq, s, Gg, Cg, scratch) : 0);
   drawRoutes(s);
 
-  if (S.A && on) {
-    writeLines(L.aCoast, scratch, placeOnCyl(S.A.coast, s, Cg, scratch));
-    writeLines(L.aEq, scratch, placeOnCyl(S.A.eq, s, Cg, scratch));
-  } else ["aCoast", "aEq"].forEach(k => writeLines(L[k], scratch, 0));
 
   // endpoints and labels
   const pa = ptsGeo.attributes.position.array; let np = 0;
@@ -440,20 +446,41 @@ function rebuild() {
 }
 
 // ---------------- readouts ----------------
+// where a view's cylinder touches the globe; names the route when it runs along one
+function touchText(p) {
+  return withPane(p, () => {
+    const Mm = M(), r = S.routes.find(r => onCylEquator(Mm, r.a, r.b));
+    return r ? `Touches along ${r.an} → ${r.bn}` : touchLabel(Mm);
+  });
+}
 function updateReadout() {
-  $("touch").textContent = touchLabel(M());
-  for (const [p, R] of [["g", S.G], ["c", S.C]]) {
+  const sp = selPane();
+  $("touch").textContent = touchText(sp);
+  for (const [p, R] of [["g", S.G], ["c", sp.C]]) {
     euler(R).forEach((v, i) => { const el = $(p + i); if (document.activeElement !== el) el.value = v.toFixed(1); $(p + i + "o").textContent = v.toFixed(1) + "°"; });
   }
   for (const i of [0, 2, 3]) $("st" + i).setAttribute("aria-pressed", S.step === i);
-  $("clearA").disabled = !S.A;
-  $("lgA").hidden = !(S.A && S.cylOn);
+  $("compare").setAttribute("aria-pressed", S.compare);
+  $("cylWhich").textContent = S.compare ? " · view " + S.sel.toUpperCase() : "";
+  for (const p of [panes.a, panes.b]) {
+    const el = $("pane" + p.id.toUpperCase());
+    el.hidden = !S.compare;
+    if (!S.compare) continue;
+    Object.assign(el.style, { left: p.rect.x + "px", top: p.rect.y + "px", width: p.rect.w + "px", height: p.rect.h + "px" });
+    // the top-left view shares its corner with the opacity sliders: its label goes below them
+    const btn = el.querySelector("button"), clash = p.rect.x === 0 && p.rect.y === 0;
+    btn.style.top = clash ? ($("overlay").offsetHeight + 22) + "px" : "";
+    btn.style.right = clash ? "auto" : ""; btn.style.left = clash ? "16px" : "";
+    el.classList.toggle("sel", S.sel === p.id);
+    el.querySelector("button").textContent = p.id.toUpperCase() + " · " + touchText(p);
+    el.querySelector("button").setAttribute("aria-pressed", S.sel === p.id);
+  }
   $("bench").classList.toggle("cylOff", !S.cylOn);
 }
 
 // ---------------- animation ----------------
 // Each channel runs one animation at a time; starting a new one stops the old one.
-const anims = { orient: 0, stage: 0, camera: 0 };
+const anims = { orient: 0, "orient-a": 0, "orient-b": 0, stage: 0, camera: 0 };
 let running = 0;
 function tween(ms, f, channel = "orient") {
   const gen = ++anims[channel];
@@ -483,36 +510,69 @@ async function setStep(t) {
   if (S.step === 0 && S.s === 0) { S.cylOn = false; dirty = true; }
 }
 function cameraTo(to, up, ms = 900) {
-  const from = { ...cam }, u0 = camera.up.clone(), u1 = new THREE.Vector3(...up);
+  const from = { ...cam }, u0 = baseUp.clone(), u1 = new THREE.Vector3(...up);
   let dy = to.yaw - from.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-  return tween(ms, k => { const e = ease(k); cam.yaw = from.yaw + dy * e; cam.pitch = from.pitch + (to.pitch - from.pitch) * e; cam.dist = from.dist + (to.dist - from.dist) * e; camera.up.copy(u0).lerp(u1, e).normalize(); placeCamera(); }, "camera");
+  return tween(ms, k => { const e = ease(k); cam.yaw = from.yaw + dy * e; cam.pitch = from.pitch + (to.pitch - from.pitch) * e; cam.dist = from.dist + (to.dist - from.dist) * e; baseUp.copy(u0).lerp(u1, e).normalize(); placeCamera(); }, "camera");
 }
 // unrolled, the bench is the wall map: look at the sheet straight on, map north up
 function faceSheet() {
-  const n = toThree(mv(S.C, [1, 0, 0])), up = toThree(mv(S.C, [0, 0, 1]));
+  const C = panes.b.C, n = toThree(mv(C, [1, 0, 0])), up = toThree(mv(C, [0, 0, 1]));
   const half = Math.tan(rad(camera.fov / 2));
   const fit = 1 + 1.08 * Math.max(MAXH / half, Math.PI / (half * camera.aspect));
   return cameraTo({ yaw: Math.atan2(n[0], n[2]), pitch: Math.asin(Math.max(-1, Math.min(1, n[1]))), dist: Math.min(24, fit) }, up);
 }
-async function animateTo(Gt, Ct, ms = 1000) {
-  const G0 = S.G, C0 = S.C;
+// turn the globe to Gt and a view's cylinder to Ct together
+async function animateTo(Gt, Ct, ms = 1000, pane = selPane()) {
+  const G0 = S.G, C0 = pane.C, ch = "orient-" + pane.id;
   const qG = new THREE.Quaternion(), qGt = new THREE.Quaternion(), qC = new THREE.Quaternion(), qCt = new THREE.Quaternion(), tmp = new THREE.Quaternion();
   const toQ = (R, q) => { const m = matToThree(R); q.setFromRotationMatrix(new THREE.Matrix4().set(m[0][0], m[0][1], m[0][2], 0, m[1][0], m[1][1], m[1][2], 0, m[2][0], m[2][1], m[2][2], 0, 0, 0, 0, 1)); };
   const fromQ = q => { const e = new THREE.Matrix4().makeRotationFromQuaternion(q).elements; return matFromThree([[e[0], e[4], e[8]], [e[1], e[5], e[9]], [e[2], e[6], e[10]]]); };
   toQ(G0, qG); toQ(Gt, qGt); toQ(C0, qC); toQ(Ct, qCt);
-  const gen = anims.orient + 1;
-  await tween(ms, k => { const e = ease(k); S.G = fromQ(tmp.copy(qG).slerp(qGt, e)); S.C = fromQ(tmp.copy(qC).slerp(qCt, e)); });
-  if (anims.orient === gen) { S.G = Gt; S.C = Ct; dirty = true; }
+  const gen = anims[ch] + 1;
+  await tween(ms, k => { const e = ease(k); S.G = fromQ(tmp.copy(qG).slerp(qGt, e)); pane.C = fromQ(tmp.copy(qC).slerp(qCt, e)); }, ch);
+  if (anims[ch] === gen) { S.G = Gt; pane.C = Ct; dirty = true; }
 }
 // at the Globe step, turning the cylinder brings it out, map projected
 function showCylinder() { if (S.step === 0) setStep(2); }
 
-// ---------------- freeze ----------------
-function freeze() {
-  const Mr = M(), segsOf = lines => projectLines(lines, Mr).segs;
-  S.A = { M: Mr, coast: segsOf(SRC.coast), eq: segsOf(SRC.eq) };
+// ---------------- views ----------------
+// Unrolled, each view looks straight at its own sheet: view A's camera is view B's turned by the difference
+// between the two cylinders, blended in as the cylinders unroll.
+function paneCamera(p) {
+  placeCamera();
+  const w = Math.max(0, Math.min(1, S.s - 1));
+  if (S.compare && p === panes.a && w > 0) {
+    const m = matToThree(mmul(panes.a.C, mT(panes.b.C)));
+    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().set(m[0][0], m[0][1], m[0][2], 0, m[1][0], m[1][1], m[1][2], 0, m[2][0], m[2][1], m[2][2], 0, 0, 0, 0, 1));
+    const qw = new THREE.Quaternion().slerp(q, w);
+    camera.position.applyQuaternion(qw); camera.up.copy(baseUp).applyQuaternion(qw); camera.lookAt(0, 0, 0);
+  }
+  camera.updateMatrixWorld();
+}
+// side by side when there's width, stacked on a tall screen
+function layout() {
+  const r = bench.getBoundingClientRect(), W = r.width, H = r.height;
+  if (!S.compare) panes.b.rect = { x: 0, y: 0, w: W, h: H };
+  else if (W >= H * 0.9) { panes.a.rect = { x: 0, y: 0, w: W / 2, h: H }; panes.b.rect = { x: W / 2, y: 0, w: W / 2, h: H }; }
+  else { panes.a.rect = { x: 0, y: 0, w: W, h: H / 2 }; panes.b.rect = { x: 0, y: H / 2, w: W, h: H / 2 }; }
+  camera.aspect = panes.b.rect.w / Math.max(1, panes.b.rect.h); camera.updateProjectionMatrix();
   dirty = true;
 }
+function setCompare(on) {
+  S.compare = on; S.sel = "b";
+  if (on) { panes.a.C = panes.b.C.map(r => r.slice()); panes.a.mapKey = ""; panes.a.PBkey = ""; showCylinder(); }
+  layout();
+  if (S.step === 3) faceSheet();
+}
+function selectPane(id) { if (S.compare && S.sel !== id) { S.sel = id; dirty = true; } }
+// turn the selected view's cylinder; unrolled, look square at the map again
+async function turnCylinder(Ct) {
+  const p = selPane();
+  showCylinder();
+  await animateTo(S.G, Ct, 1000, p);
+  if (S.step === 3 && p === panes.b) faceSheet();
+}
+
 // ---------------- input ----------------
 const HINT = "Drag the globe or cylinder to turn it · Shift-drag: both · Right-drag: look around · Click: add a point";
 const HOVER_HINT = {
@@ -538,9 +598,14 @@ const pointers = new Map();
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 // what's under the pointer: the unrolled sheet first, then the globe, then the cylinder around it
 function hitTest(x, y) {
-  const r = cv.getBoundingClientRect();
-  ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
-  scene.updateMatrixWorld(); ray.setFromCamera(ndc, camera);
+  const r = cv.getBoundingClientRect(), px = x - r.left, py = y - r.top, ra = panes.a.rect;
+  const pane = S.compare && ra.x <= px && px < ra.x + ra.w && ra.y <= py && py < ra.y + ra.h ? panes.a : panes.b;
+  return withPane(pane, () => Object.assign(hitPane(px, py, pane), { pane }));
+}
+function hitPane(px, py, pane) {
+  const pr = pane.rect;
+  ndc.set(((px - pr.x) / pr.w) * 2 - 1, -((py - pr.y) / pr.h) * 2 + 1);
+  paneCamera(pane); scene.updateMatrixWorld(); ray.setFromCamera(ndc, camera);
   if (S.s > 1.5) { const t = sheetHit(ray.ray); if (t) return { target: "sheet", t }; }
   const hg = ray.intersectObject(globeMesh, false)[0];
   if (hg) return { target: "globe", point: hg.point };
@@ -571,6 +636,7 @@ cv.addEventListener("pointerdown", e => {
     pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), dist: cam.dist }; drag = null; return;
   }
   const hit = hitTest(e.clientX, e.clientY);
+  selectPane(hit.pane.id);
   const target = e.button === 2 ? "view" : e.shiftKey && S.cylOn ? "both" : hit.target;
   drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, target, hit, button: e.button, moved: false };
   if (target !== "view") cv.style.cursor = "grabbing";
@@ -590,18 +656,20 @@ cv.addEventListener("pointermove", e => {
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
   if (drag.target === "view") { cam.yaw -= dx * 0.008; cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch + dy * 0.008)); placeCamera(); dirty = true; return; }
 
-  camera.updateMatrixWorld();
+  paneCamera(drag.hit.pane);
   const e2 = camera.matrixWorld.elements;
   const right = fromThree([e2[0], e2[1], e2[2]]), up = fromThree([e2[4], e2[5], e2[6]]);
   const R = mmul(axisAngle(up, dx * 0.008), axisAngle(right, dy * 0.008));
   if (drag.target === "globe" || drag.target === "sheet" || drag.target === "both") S.G = orthonormalize(mmul(R, S.G));
-  if (drag.target === "cyl" || drag.target === "both") S.C = orthonormalize(mmul(R, S.C));
+  if (drag.target === "cyl" || drag.target === "both") drag.hit.pane.C = orthonormalize(mmul(R, drag.hit.pane.C));
   dirty = true;
 });
 cv.addEventListener("pointerup", e => {
   if (drag && !drag.moved && drag.button === 0 && !e.shiftKey) {
-    if (drag.hit.target === "globe") { const p = drag.hit.point; clickAt(lonlat(mv(mT(S.C), fromThree([p.x, p.y, p.z])))); }
-    else if (drag.hit.target === "sheet") clickAt(drag.hit.t);
+    withPane(drag.hit.pane, () => {
+      if (drag.hit.target === "globe") { const p = drag.hit.point; clickAt(lonlat(mv(mT(S.C), fromThree([p.x, p.y, p.z])))); }
+      else if (drag.hit.target === "sheet") clickAt(drag.hit.t);
+    });
   }
   if (drag && drag.target !== "view") cv.style.cursor = "grab";
 });
@@ -614,25 +682,27 @@ cv.addEventListener("wheel", e => { e.preventDefault(); cam.dist = Math.max(4, M
 // controls
 for (const p of ["g", "c"]) for (let i = 0; i < 3; i++) $(p + i).addEventListener("input", () => {
   const v = [0, 1, 2].map(j => +$(p + j).value);
-  if (p === "g") S.G = d3R(...v); else { S.C = d3R(...v); showCylinder(); }
+  if (p === "g") S.G = d3R(...v); else { selPane().C = d3R(...v); showCylinder(); }
   dirty = true;
 });
 for (const i of [0, 2, 3]) $("st" + i).onclick = () => setStep(i);
-$("pr-normal").onclick = () => { showCylinder(); animateTo(S.G, ident()); };
-$("pr-trans").onclick = () => { showCylinder(); animateTo(S.G, d3R(0, 0, -90)); };
-$("pr-obl").onclick = () => { showCylinder(); animateTo(S.G, d3R(0, 0, -45)); };
+$("pr-normal").onclick = () => turnCylinder(ident());
+$("pr-trans").onclick = () => turnCylinder(d3R(0, 0, -90));
+$("pr-obl").onclick = () => turnCylinder(d3R(0, 0, -45));
+$("compare").onclick = () => setCompare(!S.compare);
+$("paneA").querySelector("button").onclick = () => selectPane("a");
+$("paneB").querySelector("button").onclick = () => selectPane("b");
 $("mapOpacity").addEventListener("input", e => { S.mapOpacity = +e.target.value / 100; $("mapo").textContent = e.target.value + "%"; dirty = true; });
 $("opacity").addEventListener("input", e => { S.globeOpacity = +e.target.value / 100; $("opo").textContent = e.target.value + "%"; dirty = true; });
 $("clearRoutes").onclick = () => { S.routes = []; S.from = null; $("from").value = ""; $("to").value = ""; routesChanged(); };
-$("freeze").onclick = () => { freeze(); showCylinder(); };
-$("clearA").onclick = () => { S.A = null; dirty = true; };
-// Reset: this step's starting state (globe, cylinder, view, opacity, frozen map); step and routes stay
+// Reset: this step's starting state (globe, cylinder, view, opacity); step and routes stay
 $("reset").onclick = async () => {
-  S.A = null; S.from = null; $("from").value = ""; $("to").value = "";
+  S.from = null; $("from").value = ""; $("to").value = "";
   S.globeOpacity = 0.55; $("opacity").value = 55; $("opo").textContent = "55%";
   S.mapOpacity = 0.85; $("mapOpacity").value = 85; $("mapo").textContent = "85%";
-  if (S.step === 3) { await animateTo(ident(), ident(), 700); faceSheet(); }
-  else { animateTo(ident(), ident(), 700); cameraTo({ ...CAM0, dist: S.step === 0 ? CAM0.dist : CAMCYL }, [0, 1, 0], 700); }
+  if (S.compare) animateTo(ident(), ident(), 700, panes.a);
+  if (S.step === 3) { await animateTo(ident(), ident(), 700, panes.b); faceSheet(); }
+  else { animateTo(ident(), ident(), 700, panes.b); cameraTo({ ...CAM0, dist: S.step === 0 ? CAM0.dist : CAMCYL }, [0, 1, 0], 700); }
 };
 window.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
@@ -643,13 +713,24 @@ window.addEventListener("keydown", e => {
 function resize() {
   const r = bench.getBoundingClientRect();
   renderer.setSize(r.width, r.height, false);
-  camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix();
-  dirty = true;
+  layout();
 }
 new ResizeObserver(resize).observe(bench);
 function frame() {
-  if (dirty) { dirty = false; rebuild(); updateReadout(); }
-  renderer.render(scene, camera);
+  // draw only when something changed (the canvas keeps its last picture); each view in its own part of the canvas
+  if (dirty) {
+    dirty = false;
+    const H = bench.getBoundingClientRect().height;
+    renderer.setScissorTest(S.compare);
+    for (const p of S.compare ? [panes.a, panes.b] : [panes.b]) {
+      cur = p; paneCamera(p); rebuild();
+      const r = p.rect;
+      renderer.setViewport(r.x, H - r.y - r.h, r.w, r.h); renderer.setScissor(r.x, H - r.y - r.h, r.w, r.h);
+      renderer.render(scene, camera);
+    }
+    cur = panes.b;
+    updateReadout();
+  }
   requestAnimationFrame(frame);
 }
 (routesFromHash(location.hash) || []).forEach(r => S.routes.push({ a: r.a, b: r.b, an: nameOf(r.a), bn: nameOf(r.b) }));
@@ -660,6 +741,6 @@ window.addEventListener("DOMContentLoaded", () => requestAnimationFrame(frame));
 // hooks for tests
 window.__lab = { S, M, globe: () => ({ opacity: globeMat.opacity, depthWrite: globeMat.depthWrite }),
   screenOf: p => { scene.updateMatrixWorld(); const v = new THREE.Vector3(...p).project(camera), r = cv.getBoundingClientRect(); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height]; },
-  idle: () => running === 0 && !dirty, freeze, setStep, animateTo,
+  idle: () => running === 0 && !dirty, setStep, animateTo, panes, alongRoute,
   map: () => ({ visible: mapMesh.visible, opacity: mapMat.opacity }),
   counts: () => Object.assign(Object.fromEntries(Object.entries(L).map(([k, o]) => [k, o.geometry.drawRange.count])), { routes: routeGroup.children.length }) };
