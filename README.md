@@ -12,8 +12,7 @@ follow along.
   `42.36N 71.06W`), or a click on the globe or map. Each route is drawn as a great circle and a rhumb line, with
   both distances and the rhumb line's extra.
 - **Globe and cylinder:** turn either one, or both. Normal, transverse and oblique presets. Globe opacity.
-- **Country:** move one across the globe against a frozen copy of the map to see why size-comparison maps bend
-  its borders.
+- **Freeze:** keep a copy of the map on the cylinder to compare cylinder positions.
 
 Routes live in the address (`#routes=lon,lat,lon,lat;…`). Older `#lines=` links and `/unroll/` links still open.
 

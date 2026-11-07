@@ -18,12 +18,6 @@ test('d3R and euler round-trip', () => {
   near(l, 30); near(p, -20); near(g, 45);
 });
 
-test('moving a country takes its point exactly to the target', () => {
-  const q = [-98, 39], t = [10, 50];
-  const got = S.lonlat(S.mv(S.moveRotation(q, t), S.vec(...q)));
-  near(got[0], t[0]); near(got[1], t[1]);
-});
-
 test('Mercator heights invert and match psi', () => {
   for (const lat of [-60, -10, 0, 25, 70]) near(S.cylLat(S.cylH(rad(lat))), rad(lat), 1e-12);
   near(S.cylH(rad(45)), psi(rad(45)));

@@ -85,8 +85,4 @@ function cylPoint(theta, h) { return [Math.cos(theta), Math.sin(theta), h]; }
 // same point after unrolling onto the plane tangent at θ = 0
 function flatPoint(theta, h) { return [1, theta, h]; }
 
-// Moving a country: the rigid rotation taking q to t while keeping north pointing north at the moved point.
-// Spin q onto the 0° meridian, slide it along that meridian to t's latitude, spin out to t's longitude.
-function moveRotation(q, t) { return mmul(Rz(rad(t[0])), mmul(Ry(rad(t[1] - q[1])), Rz(rad(-q[0])))); }
-
-if (typeof module !== 'undefined') module.exports = { MAXH, vec, lonlat, mmul, mT, mv, ident, Rz, Ry, Rx, d3R, euler, axisAngle, orthonormalize, toThree, fromThree, matToThree, matFromThree, cylH, cylLat, touchLabel, cylPoint, flatPoint, moveRotation };
+if (typeof module !== 'undefined') module.exports = { MAXH, vec, lonlat, mmul, mT, mv, ident, Rz, Ry, Rx, d3R, euler, axisAngle, orthonormalize, toThree, fromThree, matToThree, matFromThree, cylH, cylLat, touchLabel, cylPoint, flatPoint };

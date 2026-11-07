@@ -172,7 +172,6 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
         <span class="cylOnly"><i class="sw seam"></i>Seam</span>
         <span><i class="sw gcl"></i>Great circle</span>
         <span><i class="sw rhl"></i>Rhumb line</span>
-        <span><i class="sw b"></i>Country</span>
         <span id="lgA" hidden><i class="sw a"></i>Frozen map</span>
       </div>
     </section>
@@ -212,15 +211,7 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
         <div class="slider"><label for="c1">Tilt</label><input type="range" id="c1" min="-90" max="90" step="0.5" value="0"><output id="c1o">0°</output></div>
         <div class="slider"><label for="c2">Roll</label><input type="range" id="c2" min="-180" max="180" step="0.5" value="0"><output id="c2o">0°</output></div>
         <p class="note" id="touch">Touches along the equator</p>
-      </div>
-
-      <div class="sec" id="countrySec">
-        <h2><span class="dot" style="background:var(--b)"></span>Country</h2>
-        <input id="country" class="txt" list="countries" value="United States of America" aria-label="Country">
-        <datalist id="countries"></datalist>
         <div class="row">
-          <button class="btn" id="move" title="Then click where it should go">Move</button>
-          <button class="btn" id="putBack" disabled>Put back</button>
           <button class="btn a" id="freeze" title="Keep a copy of the current map on the cylinder">Freeze</button>
           <button class="btn" id="clearA" disabled>Unfreeze</button>
         </div>

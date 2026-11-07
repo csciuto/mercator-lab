@@ -150,20 +150,13 @@ test('Unroll: the map faces you and a click adds a point; Reset stays on Unroll 
   await expect(page.locator(ROUTE)).toHaveCount(2);
 });
 
-test('Move a country: the old map stays frozen, routes hide, Put back restores them', async ({ page }) => {
+test('Freeze keeps the map on the cylinder; Unfreeze removes it', async ({ page }) => {
   await page.goto(APP + BOS_ROM);
-  await page.locator('#st3').click(); await idle(page);
-  await page.evaluate(() => window.__lab.moveCountryTo([15, 50])); await idle(page);
-  await expect(page.locator(READY)).toHaveText('Hidden while a country is moved');
-  let c = await counts(page);
-  expect(c.aCoast).toBeGreaterThan(0);         // frozen automatically
-  expect(c.coast).toBe(0);                     // only the moved country is live
-  expect(c.hi).toBeGreaterThan(0);
-  await page.locator('#putBack').click(); await idle(page);
-  await expect(page.locator(ROUTE)).toHaveCount(1);
-  await page.locator('#clearA').click();
-  c = await counts(page);
-  expect(c.aCoast).toBe(0);
+  await page.locator('#st2').click(); await idle(page);
+  await page.locator('#freeze').click(); await idle(page);
+  expect((await counts(page)).aCoast).toBeGreaterThan(0);
+  await page.locator('#clearA').click(); await idle(page);
+  expect((await counts(page)).aCoast).toBe(0);
 });
 
 test('fits a phone: nothing scrolls sideways', async ({ page }) => {

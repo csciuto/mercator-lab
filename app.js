@@ -6,7 +6,6 @@ const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).
 const COL = { earth: css("--earth"), cyl: css("--cyl"), seam: css("--seam"), b: css("--b"), a: css("--a"), bg: css("--bg"), gc: css("--gcl"), rh: css("--rhl"), ink: css("--ink") };
 
 // ---------------- data ----------------
-const FEATURES = topojson.feature(WORLD, WORLD.objects.countries).features.filter(f => f.properties && f.properties.name);
 const COAST = topojson.mesh(WORLD, WORLD.objects.countries, (a, b) => a === b);
 const LANDGEO = topojson.feature(WORLD, WORLD.objects.countries);
 
@@ -27,24 +26,7 @@ const SRC = {
   coast: toVecs(COAST.coordinates),
   grat: toVecs([-60, -30, 30, 60].map(parallel).concat([-150, -120, -90, -60, -30, 30, 60, 90, 120, 150, 180].map(l => meridian(l)))),
   eq: toVecs([parallel(0), meridian(0)]),
-  hi: [],
 };
-let HI = { name: "", centroid: [0, 0], poly: null };
-function setCountry(name) {
-  const f = FEATURES.find(f => f.properties.name.toLowerCase() === name.toLowerCase());
-  if (!f) return false;
-  const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
-  // keep the largest part (contiguous US, mainland France...)
-  let best = polys[0], bestA = -1;
-  for (const p of polys) { const a = d3.geoArea({ type: "Polygon", coordinates: p }); if (a < 2 * Math.PI && a > bestA) { bestA = a; best = p; } }
-  HI = { name: f.properties.name, centroid: d3.geoCentroid({ type: "Polygon", coordinates: best }), poly: { type: "Polygon", coordinates: best } };
-  mapKey = "";
-  SRC.hi = toVecs(best);
-  dirty = true;
-  return true;
-}
-$("countries").innerHTML = FEATURES.map(f => f.properties.name).sort().map(n => `<option value="${n.replace(/"/g, "&quot;")}"></option>`).join("");
-
 // ---------------- state ----------------
 // step: 0 globe, 2 projected, 3 unrolled (the buttons; 1, an empty cylinder, is no longer offered). s: 0 on the globe → 1 on the cylinder → 2 flat (animated).
 const S = {
@@ -53,8 +35,7 @@ const S = {
   globeOpacity: 0.55, mapOpacity: 0.85,
   routes: [], from: null,   // from: {c, name} waiting for a To
   A: null,                  // frozen map: projected segments on the cylinder
-  moved: null,              // {G0}: the globe before a country was moved
-  armed: false, busy: false,
+
 };
 let dirty = true, routesVer = 0;
 const M = () => mmul(mT(S.C), S.G); // the globe in the cylinder's frame: all the map depends on
@@ -179,8 +160,7 @@ const mapGeo = (() => {
 const mapMesh = new THREE.Mesh(mapGeo, mapMat); mapMesh.frustumCulled = false; mapMesh.renderOrder = -1; scene.add(mapMesh);
 let mapKey = "", mapDrawn = 0, mapTimer = 0;
 function drawMap(force) {
-  const base = S.moved && S.A ? S.A.M : M();
-  const key = JSON.stringify([base, M(), HI.name, !!S.moved]);
+  const base = M(), key = JSON.stringify(base);
   if (key === mapKey) return;
   const now = performance.now();
   if (!force && now - mapDrawn < 120) { clearTimeout(mapTimer); mapTimer = setTimeout(() => { dirty = true; drawMap(true); }, 130); return; } // at most ~8 redraws a second while dragging
@@ -191,7 +171,6 @@ function drawMap(force) {
   const p = d3.geoPath(proj(base), g);
   g.beginPath(); p(LANDGEO); g.fillStyle = "#d9cfb4"; g.fill();
   g.beginPath(); p(BORDERS); g.strokeStyle = "rgba(40,40,30,0.45)"; g.lineWidth = 0.8; g.stroke();
-  if (HI.poly) { const q = d3.geoPath(proj(M()), g); g.beginPath(); q(HI.poly); g.fillStyle = S.moved ? "rgba(255,122,89,0.75)" : "rgba(255,122,89,0.35)"; g.fill(); }
   mapTex.needsUpdate = true;
 }
 function placeMap(s) {
@@ -210,8 +189,8 @@ function dynLines(color, opacity, max = 120000) {
 }
 const L = {
   wire: dynLines(COL.cyl, 0.26, 20000), wireHi: dynLines(COL.cyl, 0.95, 4000), seam: dynLines(COL.seam, 0.9, 2000),
-  coast: dynLines(COL.b, 0.9), grat: dynLines(COL.earth, 0.3, 30000), eq: dynLines(COL.earth, 1, 4000), hi: dynLines(COL.b, 1, 20000),
-  aCoast: dynLines(COL.a, 0.7), aEq: dynLines(COL.a, 0.9, 6000), aHi: dynLines(COL.a, 1, 20000),
+  coast: dynLines(COL.b, 0.9), grat: dynLines(COL.earth, 0.3, 30000), eq: dynLines(COL.earth, 1, 4000), 
+  aCoast: dynLines(COL.a, 0.7), aEq: dynLines(COL.a, 0.9, 6000),
 };
 // routes are drawn as tubes so they stay visible on the busy cylinder; rebuilt whenever the scene changes
 const routeGroup = new THREE.Group(); scene.add(routeGroup);
@@ -333,7 +312,7 @@ function placePoint(v, s) {
 }
 
 // ---------------- routes ----------------
-const routesShown = () => S.moved ? [] : S.routes;   // hidden while a country is moved: they'd have turned with the globe
+const routesShown = () => S.routes;
 const nameOf = c => cityAt(c, PLACES) || fmtLL(c);
 let RV = null, RVver = -1;
 function routeVecs() {
@@ -373,7 +352,6 @@ function renderRoutes() {
   const ul = $("routes"); ul.innerHTML = "";
   const note = t => { const li = document.createElement("li"); li.className = "empty"; li.textContent = t; ul.append(li); };
   if (!S.routes.length) return note("No routes yet");
-  if (S.moved) return note("Hidden while a country is moved");
   for (const r of S.routes) {
     const st = routeStats(r.a, r.b), li = document.createElement("li");
     const both = km => `${fmtNum(km, km)} km · ${fmtNum(km * KM_MI, km)} mi`;
@@ -390,7 +368,6 @@ function pickPoint(c, name) {
   if (gcDist(S.from.c, c) < 0.5) return;
   S.routes.push({ a: S.from.c, b: c, an: S.from.name, bn: name });
   S.from = null; $("from").value = ""; $("to").value = "";
-  if (S.moved) putBack();
   routesChanged();
 }
 function clickName(c) { const p = nearestPlace(PLACES, c, 50); return p ? p[0] : fmtLL(c); }
@@ -399,9 +376,9 @@ function clickName(c) { const p = nearestPlace(PLACES, c, 50); return p ? p[0] :
 let PB = null, PBkey = "";
 function rebuild() {
   const Mr = M();
-  const key = JSON.stringify([Mr, HI.name]);
+  const key = JSON.stringify(Mr);
   if (key !== PBkey) {
-    PB = { coast: projectLines(SRC.coast, Mr), grat: projectLines(SRC.grat, Mr), eq: projectLines(SRC.eq, Mr), hi: projectLines(SRC.hi, Mr) };
+    PB = { coast: projectLines(SRC.coast, Mr), grat: projectLines(SRC.grat, Mr), eq: projectLines(SRC.eq, Mr) };
     PBkey = key;
   }
   const s = S.s, Gg = S.G, Cg = S.C;
@@ -428,18 +405,16 @@ function rebuild() {
   writeLines(L.seam, scratch, on ? placeOnCyl(WIRE.seam, s, Cg, scratch) : 0);
 
   // the projected map exists only once Project starts; before that the globe's own texture is the map
-  const proj = s > 0.001, whole = proj && !S.moved;
+  const whole = s > 0.001;
   writeLines(L.coast, scratch, whole ? placeLive(PB.coast, s, Gg, Cg, scratch) : 0);
   writeLines(L.grat, scratch, whole ? placeLive(PB.grat, s, Gg, Cg, scratch) : 0);
   writeLines(L.eq, scratch, whole ? placeLive(PB.eq, s, Gg, Cg, scratch) : 0);
-  writeLines(L.hi, scratch, placeLive(PB.hi, s, Gg, Cg, scratch));
   drawRoutes(s);
 
   if (S.A && on) {
     writeLines(L.aCoast, scratch, placeOnCyl(S.A.coast, s, Cg, scratch));
     writeLines(L.aEq, scratch, placeOnCyl(S.A.eq, s, Cg, scratch));
-    writeLines(L.aHi, scratch, placeOnCyl(S.A.hi, s, Cg, scratch));
-  } else ["aCoast", "aEq", "aHi"].forEach(k => writeLines(L[k], scratch, 0));
+  } else ["aCoast", "aEq"].forEach(k => writeLines(L[k], scratch, 0));
 
   // endpoints and labels
   const pa = ptsGeo.attributes.position.array; let np = 0;
@@ -471,8 +446,6 @@ function updateReadout() {
     euler(R).forEach((v, i) => { const el = $(p + i); if (document.activeElement !== el) el.value = v.toFixed(1); $(p + i + "o").textContent = v.toFixed(1) + "°"; });
   }
   for (const i of [0, 2, 3]) $("st" + i).setAttribute("aria-pressed", S.step === i);
-  $("putBack").disabled = !S.moved || S.busy;
-  $("move").disabled = S.busy;
   $("clearA").disabled = !S.A;
   $("lgA").hidden = !(S.A && S.cylOn);
   $("bench").classList.toggle("cylOff", !S.cylOn);
@@ -534,33 +507,12 @@ async function animateTo(Gt, Ct, ms = 1000) {
 // at the Globe step, turning the cylinder brings it out, map projected
 function showCylinder() { if (S.step === 0) setStep(2); }
 
-// ---------------- country, freeze ----------------
+// ---------------- freeze ----------------
 function freeze() {
   const Mr = M(), segsOf = lines => projectLines(lines, Mr).segs;
-  S.A = { M: Mr, coast: segsOf(SRC.coast), eq: segsOf(SRC.eq), hi: segsOf(SRC.hi) };
+  S.A = { M: Mr, coast: segsOf(SRC.coast), eq: segsOf(SRC.eq) };
   dirty = true;
 }
-// turn the globe so the country's center lands on t (cylinder lon/lat), north kept up; the map before stays frozen
-async function moveCountryTo(t) {
-  if (S.busy) return;
-  S.busy = true;
-  if (!S.moved) { if (!S.A) freeze(); S.moved = { G0: S.G }; routesVer++; renderRoutes(); }
-  const C0 = S.C, G0 = S.G, q = lonlat(mv(M(), vec(...HI.centroid)));
-  let dl = t[0] - q[0]; dl = ((dl + 540) % 360) - 180;
-  await tween(1400, k => {
-    const e = ease(k), tk = [q[0] + dl * e, q[1] + (t[1] - q[1]) * e];
-    S.G = orthonormalize(mmul(C0, mmul(moveRotation(q, tk), mmul(mT(C0), G0))));
-  });
-  S.busy = false; dirty = true;
-}
-async function putBack() {
-  if (!S.moved) return;
-  const G0 = S.moved.G0;
-  S.moved = null; routesVer++; renderRoutes();
-  await animateTo(G0, S.C, 900);
-}
-function arm(on) { S.armed = on; $("move").classList.toggle("on", on); $("move").textContent = on ? "Click a spot" : "Move"; setHover(hoverTarget, true); }
-
 // ---------------- input ----------------
 const HINT = "Drag the globe or cylinder to turn it · Shift-drag: both · Right-drag: look around · Click: add a point";
 const HOVER_HINT = {
@@ -574,8 +526,8 @@ $("dragHint").textContent = HINT;
 function setHover(t, force) {
   if (t === hoverTarget && !force) return;
   hoverTarget = t; dirty = true;
-  cv.style.cursor = S.armed && (t === "globe" || t === "sheet") ? "crosshair" : t === "view" || !t ? "default" : "grab";
-  $("dragHint").textContent = S.armed ? "Click where the country should go · Esc: cancel" : t ? HOVER_HINT[t] : HINT;
+  cv.style.cursor = t === "view" || !t ? "default" : "grab";
+  $("dragHint").textContent = t ? HOVER_HINT[t] : HINT;
 }
 
 const cv = renderer.domElement;
@@ -608,7 +560,6 @@ function sheetHit(r) {
 }
 // a click at cylinder lon/lat t (on the globe or the sheet)
 function clickAt(t) {
-  if (S.armed) { arm(false); moveCountryTo(t); return; }
   const c = lonlat(mv(mT(M()), vec(...t)));
   pickPoint(c, clickName(c));
 }
@@ -638,7 +589,7 @@ cv.addEventListener("pointermove", e => {
   }
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
   if (drag.target === "view") { cam.yaw -= dx * 0.008; cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch + dy * 0.008)); placeCamera(); dirty = true; return; }
-  if (S.busy) return;
+
   camera.updateMatrixWorld();
   const e2 = camera.matrixWorld.elements;
   const right = fromThree([e2[0], e2[1], e2[2]]), up = fromThree([e2[4], e2[5], e2[6]]);
@@ -673,15 +624,11 @@ $("pr-obl").onclick = () => { showCylinder(); animateTo(S.G, d3R(0, 0, -45)); };
 $("mapOpacity").addEventListener("input", e => { S.mapOpacity = +e.target.value / 100; $("mapo").textContent = e.target.value + "%"; dirty = true; });
 $("opacity").addEventListener("input", e => { S.globeOpacity = +e.target.value / 100; $("opo").textContent = e.target.value + "%"; dirty = true; });
 $("clearRoutes").onclick = () => { S.routes = []; S.from = null; $("from").value = ""; $("to").value = ""; routesChanged(); };
-$("country").addEventListener("change", e => { if (!setCountry(e.target.value)) e.target.value = HI.name; });
-$("move").onclick = () => arm(!S.armed);
-$("putBack").onclick = putBack;
 $("freeze").onclick = () => { freeze(); showCylinder(); };
 $("clearA").onclick = () => { S.A = null; dirty = true; };
-// Reset: this step's starting state (globe, cylinder, view, opacity, frozen map, moved country); step and routes stay
+// Reset: this step's starting state (globe, cylinder, view, opacity, frozen map); step and routes stay
 $("reset").onclick = async () => {
-  arm(false); S.A = null; S.from = null; $("from").value = ""; $("to").value = "";
-  if (S.moved) { S.moved = null; routesVer++; renderRoutes(); }
+  S.A = null; S.from = null; $("from").value = ""; $("to").value = "";
   S.globeOpacity = 0.55; $("opacity").value = 55; $("opo").textContent = "55%";
   S.mapOpacity = 0.85; $("mapOpacity").value = 85; $("mapo").textContent = "85%";
   if (S.step === 3) { await animateTo(ident(), ident(), 700); faceSheet(); }
@@ -689,8 +636,7 @@ $("reset").onclick = async () => {
 };
 window.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
-  if (S.armed) arm(false);
-  else if (S.from && !(e.target.closest && e.target.closest("input"))) { S.from = null; $("from").value = ""; dirty = true; }
+  if (S.from && !(e.target.closest && e.target.closest("input"))) { S.from = null; $("from").value = ""; dirty = true; }
 });
 
 // ---------------- loop ----------------
@@ -706,15 +652,14 @@ function frame() {
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
-setCountry("United States of America");
 (routesFromHash(location.hash) || []).forEach(r => S.routes.push({ a: r.a, b: r.b, an: nameOf(r.a), bn: nameOf(r.b) }));
 routesChanged();
 placeCamera(); resize();
 window.addEventListener("DOMContentLoaded", () => requestAnimationFrame(frame)); // search.js loads after this file
 
 // hooks for tests
-window.__lab = { S, M, hi: () => HI, globe: () => ({ opacity: globeMat.opacity, depthWrite: globeMat.depthWrite }),
+window.__lab = { S, M, globe: () => ({ opacity: globeMat.opacity, depthWrite: globeMat.depthWrite }),
   screenOf: p => { scene.updateMatrixWorld(); const v = new THREE.Vector3(...p).project(camera), r = cv.getBoundingClientRect(); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height]; },
-  idle: () => running === 0 && !dirty, freeze, moveCountryTo, putBack, setStep, setCountry, animateTo,
+  idle: () => running === 0 && !dirty, freeze, setStep, animateTo,
   map: () => ({ visible: mapMesh.visible, opacity: mapMat.opacity }),
   counts: () => Object.assign(Object.fromEntries(Object.entries(L).map(([k, o]) => [k, o.geometry.drawRange.count])), { routes: routeGroup.children.length }) };
