@@ -7,7 +7,7 @@ Built with [Claude Code](https://claude.com/claude-code).
 A globe inside a Mercator cylinder: project the map onto it, unroll it into a wall map, and draw routes that
 follow along.
 
-- **Steps:** Globe → Cylinder → Project → Unroll.
+- **Steps:** Globe → Project → Unroll.
 - **Routes:** From and To take a city (6,000+ of 100,000 people or more) or coordinates (`42.36, -71.06`,
   `42.36N 71.06W`), or a click on the globe or map. Each route is drawn as a great circle and a rhumb line, with
   both distances and the rhumb line's extra.

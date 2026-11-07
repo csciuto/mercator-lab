@@ -45,7 +45,7 @@ function setCountry(name) {
 $("countries").innerHTML = FEATURES.map(f => f.properties.name).sort().map(n => `<option value="${n.replace(/"/g, "&quot;")}"></option>`).join("");
 
 // ---------------- state ----------------
-// step: 0 globe, 1 cylinder, 2 projected, 3 unrolled (the buttons). s: 0 on the globe → 1 on the cylinder → 2 flat (animated).
+// step: 0 globe, 2 projected, 3 unrolled (the buttons; 1, an empty cylinder, is no longer offered). s: 0 on the globe → 1 on the cylinder → 2 flat (animated).
 const S = {
   G: ident(), C: ident(),   // globe and cylinder rotations, geo frame
   step: 0, s: 0, cylOn: false,
@@ -426,7 +426,7 @@ function updateReadout() {
   for (const [p, R] of [["g", S.G], ["c", S.C]]) {
     euler(R).forEach((v, i) => { const el = $(p + i); if (document.activeElement !== el) el.value = v.toFixed(1); $(p + i + "o").textContent = v.toFixed(1) + "°"; });
   }
-  for (let i = 0; i < 4; i++) $("st" + i).setAttribute("aria-pressed", S.step === i);
+  for (const i of [0, 2, 3]) $("st" + i).setAttribute("aria-pressed", S.step === i);
   $("putBack").disabled = !S.moved || S.busy;
   $("move").disabled = S.busy;
   $("clearA").disabled = !S.A;
@@ -487,8 +487,8 @@ async function animateTo(Gt, Ct, ms = 1000) {
   await tween(ms, k => { const e = ease(k); S.G = fromQ(tmp.copy(qG).slerp(qGt, e)); S.C = fromQ(tmp.copy(qC).slerp(qCt, e)); });
   if (anims.orient === gen) { S.G = Gt; S.C = Ct; dirty = true; }
 }
-// at the Globe step, turning the cylinder brings it out
-function showCylinder() { if (S.step === 0) setStep(1); }
+// at the Globe step, turning the cylinder brings it out, map projected
+function showCylinder() { if (S.step === 0) setStep(2); }
 
 // ---------------- country, freeze ----------------
 function freeze() {
@@ -622,7 +622,7 @@ for (const p of ["g", "c"]) for (let i = 0; i < 3; i++) $(p + i).addEventListene
   if (p === "g") S.G = d3R(...v); else { S.C = d3R(...v); showCylinder(); }
   dirty = true;
 });
-for (let i = 0; i < 4; i++) $("st" + i).onclick = () => setStep(i);
+for (const i of [0, 2, 3]) $("st" + i).onclick = () => setStep(i);
 $("pr-normal").onclick = () => { showCylinder(); animateTo(S.G, ident()); };
 $("pr-trans").onclick = () => { showCylinder(); animateTo(S.G, d3R(0, 0, -90)); };
 $("pr-obl").onclick = () => { showCylinder(); animateTo(S.G, d3R(0, 0, -45)); };

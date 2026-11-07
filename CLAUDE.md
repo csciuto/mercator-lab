@@ -10,7 +10,7 @@ Commit and push freely once tests pass.
 
 - Static site, no build step and no framework unless there's a real need. `.github/workflows/deploy.yml` runs every test on each push to `main`, stamps the version (`v1.<commits>`, replacing `dev` in each page's `.version`) and only then publishes to https://corey.sciu.to/mercator-lab/.
 - Math lives in pure files (`geo.js`, `sphere.js`, `lines.js`) loaded as classic scripts and exported for Node with `module.exports`. Test it in `tests/*.test.js`; keep DOM and d3/three out of those files.
-- One view, Mercator only, built to the spec the user validated (steps Globe → Cylinder → Project → Unroll;
+- One view, Mercator only, built to the spec the user validated (steps Globe → Project → Unroll (no empty-cylinder step: the user saw no use for it);
   routes always drawn both ways; Reset keeps routes). Add to this view rather than starting a second one.
 - At Unroll the 3D stage is the wall map. There is no separate 2D map; don't add one.
 - Nothing is projected onto the cylinder before Project.

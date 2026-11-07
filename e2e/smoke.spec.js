@@ -110,20 +110,20 @@ test('× removes one route; Clear routes removes them all', async ({ page }) => 
   await expect(page.locator(READY)).toHaveText('No routes yet');
 });
 
-test('Cylinder shows an empty cylinder; Project puts the map on it; Globe takes it away', async ({ page }) => {
+test('Project brings the cylinder with the map on it; Globe takes both away', async ({ page }) => {
   await page.goto(APP + BOS_ROM);
-  await page.locator('#st1').click(); await idle(page);
+  await expect(page.locator('#st1')).toHaveCount(0);   // no empty-cylinder step
+  await page.locator('#st2').click(); await idle(page);
   let c = await counts(page);
   expect(c.wire).toBeGreaterThan(0);
-  expect(c.coast).toBe(0);                     // no ghost before Project
+  expect(c.coast).toBeGreaterThan(0);
   await page.locator('#pr-trans').click(); await idle(page);
   await expect(page.locator('#touch')).toHaveText('Touches along the 0° meridian');
-  await page.locator('#st2').click(); await idle(page);
-  c = await counts(page);
-  expect(c.coast).toBeGreaterThan(0);
   await page.locator('#st0').click(); await idle(page);
   c = await counts(page);
   expect(c.wire + c.coast).toBe(0);
+  await page.locator('#pr-obl').click(); await idle(page);   // turning the cylinder at Globe projects
+  await expect(page.locator('#st2')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('Unroll: the map faces you and a click adds a point; Reset stays on Unroll and keeps routes @desktop', async ({ page }) => {
