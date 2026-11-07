@@ -29,7 +29,9 @@ Routes live in the address (`#lines=gc:lon,lat,lon,lat;rh:…`), so a view can b
 | `world.js` | Natural Earth 110m countries (world-atlas TopoJSON), inlined so nothing is fetched. |
 | `cities.js` | The labeled cities and when each appears as you zoom; `cityAt` names a point. |
 | `places.js` | Cities for search, from GeoNames (CC BY 4.0). Built from `cities15000.txt`, keeping 100,000+ people. |
-| `index.html`, `app.js` | The app (three.js r128). |
+| `index.html`, `app.js` | The app (three.js r128): the 3D scene, routes, controls. |
+| `wallmap.js` | The wall map in the side panel. |
+| `search.js` | The search box. |
 | `help.html` | The help page. |
 | `unroll/index.html` | Redirect for old links. |
 
