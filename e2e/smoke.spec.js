@@ -13,7 +13,6 @@ test('app loads without errors @desktop', async ({ page }) => {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.setViewportSize({ width: 1200, height: 630 });
   await page.goto(APP);
-  await page.waitForLoadState('networkidle');
   await expect(page.locator('#bench canvas')).toBeVisible();
   await expect(page.locator(READY)).toHaveCount(2);
   expect(errors).toEqual([]);
