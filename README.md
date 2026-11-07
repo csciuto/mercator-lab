@@ -2,6 +2,8 @@
 
 **Live:** [corey.sciu.to/mercator-lab](https://corey.sciu.to/mercator-lab/)
 
+Built with [Claude Code](https://claude.com/claude-code).
+
 Turn a globe inside a cylinder, unroll it into a wall map, and draw great-circle and rhumb-line routes that
 follow along.
 
