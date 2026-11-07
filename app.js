@@ -34,24 +34,23 @@ const S = {
   step: 0, s: 0, cylOn: false,
   globeOpacity: 0.55, mapOpacity: 0.85,
   routes: [], from: null,   // from: {c, name} waiting for a To
-  compare: false, sel: "b", // two views side by side; which one the Cylinder controls edit
+  frozen: null,             // {M, label}: a still copy of the wall map, shown beside the live view
 };
 let dirty = true, routesVer = 0;
-// A view: its own cylinder, projection cache and map picture. B is the main view; A appears with Compare.
+// The live view: its cylinder, projection cache and map picture.
 function mkPane(id) {
   const canvas = document.createElement("canvas"); canvas.width = 1024; canvas.height = Math.round(1024 * MAXH / Math.PI);
   const tex = new THREE.CanvasTexture(canvas); tex.anisotropy = 4;
   return { id, C: ident(), PB: null, PBkey: "", canvas, tex, mapKey: "", mapDrawn: 0, mapTimer: 0, rect: { x: 0, y: 0, w: 1, h: 1 } };
 }
-const panes = { a: mkPane("a"), b: mkPane("b") };
+const panes = { b: mkPane("b") };
 let cur = panes.b;                // the view being drawn or handled; S.C is its cylinder
 Object.defineProperty(S, "C", { get: () => cur.C, set: v => { cur.C = v; } });
 function withPane(p, f) { const prev = cur; cur = p; try { return f(); } finally { cur = prev; } }
-const selPane = () => panes[S.compare ? S.sel : "b"];
 const M = () => mmul(mT(S.C), S.G); // the globe in the cylinder's frame: all the map depends on
 
 // ---------------- three.js scene ----------------
-const bench = $("bench");
+const bench = $("live");   // the live 3D view (the frozen map sits beside it)
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
 renderer.setClearColor(new THREE.Color(COL.bg), 1);
@@ -454,28 +453,13 @@ function touchText(p) {
   });
 }
 function updateReadout() {
-  const sp = selPane();
-  $("touch").textContent = touchText(sp);
-  for (const [p, R] of [["g", S.G], ["c", sp.C]]) {
+  $("touch").textContent = touchText(panes.b);
+  for (const [p, R] of [["g", S.G], ["c", panes.b.C]]) {
     euler(R).forEach((v, i) => { const el = $(p + i); if (document.activeElement !== el) el.value = v.toFixed(1); $(p + i + "o").textContent = v.toFixed(1) + "°"; });
   }
   for (const i of [0, 2, 3]) $("st" + i).setAttribute("aria-pressed", S.step === i);
-  $("compare").setAttribute("aria-pressed", S.compare);
-  $("cylWhich").textContent = S.compare ? " · view " + S.sel.toUpperCase() : "";
-  for (const p of [panes.a, panes.b]) {
-    const el = $("pane" + p.id.toUpperCase());
-    el.hidden = !S.compare;
-    if (!S.compare) continue;
-    Object.assign(el.style, { left: p.rect.x + "px", top: p.rect.y + "px", width: p.rect.w + "px", height: p.rect.h + "px" });
-    // the top-left view shares its corner with the opacity sliders: its label goes below them
-    const btn = el.querySelector("button"), clash = p.rect.x === 0 && p.rect.y === 0;
-    btn.style.top = clash ? ($("overlay").offsetHeight + 22) + "px" : "";
-    btn.style.right = clash ? "auto" : ""; btn.style.left = clash ? "16px" : "";
-    el.classList.toggle("sel", S.sel === p.id);
-    el.querySelector("button").textContent = p.id.toUpperCase() + " · " + touchText(p);
-    el.querySelector("button").setAttribute("aria-pressed", S.sel === p.id);
-  }
-  $("bench").classList.toggle("cylOff", !S.cylOn);
+  $("live").classList.toggle("cylOff", !S.cylOn);
+  $("unfreeze").disabled = !S.frozen;
 }
 
 // ---------------- animation ----------------
@@ -522,7 +506,7 @@ function faceSheet() {
   return cameraTo({ yaw: Math.atan2(n[0], n[2]), pitch: Math.asin(Math.max(-1, Math.min(1, n[1]))), dist: Math.min(24, fit) }, up);
 }
 // turn the globe to Gt and a view's cylinder to Ct together
-async function animateTo(Gt, Ct, ms = 1000, pane = selPane()) {
+async function animateTo(Gt, Ct, ms = 1000, pane = panes.b) {
   const G0 = S.G, C0 = pane.C, ch = "orient-" + pane.id;
   const qG = new THREE.Quaternion(), qGt = new THREE.Quaternion(), qC = new THREE.Quaternion(), qCt = new THREE.Quaternion(), tmp = new THREE.Quaternion();
   const toQ = (R, q) => { const m = matToThree(R); q.setFromRotationMatrix(new THREE.Matrix4().set(m[0][0], m[0][1], m[0][2], 0, m[1][0], m[1][1], m[1][2], 0, m[2][0], m[2][1], m[2][2], 0, 0, 0, 0, 1)); };
@@ -536,51 +520,74 @@ async function animateTo(Gt, Ct, ms = 1000, pane = selPane()) {
 function showCylinder() { if (S.step === 0) setStep(2); }
 
 // ---------------- views ----------------
-// Unrolled, each view looks straight at its own sheet: view A's camera is view B's turned by the difference
-// between the two cylinders, blended in as the cylinders unroll.
-function paneCamera(p) {
-  placeCamera();
-  const w = Math.max(0, Math.min(1, S.s - 1));
-  if (S.compare && p === panes.a && w > 0) {
-    const m = matToThree(mmul(panes.a.C, mT(panes.b.C)));
-    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().set(m[0][0], m[0][1], m[0][2], 0, m[1][0], m[1][1], m[1][2], 0, m[2][0], m[2][1], m[2][2], 0, 0, 0, 0, 1));
-    const qw = new THREE.Quaternion().slerp(q, w);
-    camera.position.applyQuaternion(qw); camera.up.copy(baseUp).applyQuaternion(qw); camera.lookAt(0, 0, 0);
-  }
-  camera.updateMatrixWorld();
-}
-// side by side when there's width, stacked on a tall screen
+function paneCamera() { placeCamera(); camera.updateMatrixWorld(); }
 function layout() {
-  const r = bench.getBoundingClientRect(), W = r.width, H = r.height;
-  if (!S.compare) panes.b.rect = { x: 0, y: 0, w: W, h: H };
-  else if (W >= H * 0.9) { panes.a.rect = { x: 0, y: 0, w: W / 2, h: H }; panes.b.rect = { x: W / 2, y: 0, w: W / 2, h: H }; }
-  else { panes.a.rect = { x: 0, y: 0, w: W, h: H / 2 }; panes.b.rect = { x: 0, y: H / 2, w: W, h: H / 2 }; }
-  camera.aspect = panes.b.rect.w / Math.max(1, panes.b.rect.h); camera.updateProjectionMatrix();
+  const r = bench.getBoundingClientRect();
+  panes.b.rect = { x: 0, y: 0, w: r.width, h: r.height };
+  camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix();
   dirty = true;
 }
-// Compare: A keeps the cylinder you had; B starts different (Transverse, or Normal if you had something else)
-function setCompare(on) {
-  S.compare = on; S.sel = "b";
-  if (on) {
-    panes.a.C = panes.b.C.map(r => r.slice()); panes.a.mapKey = ""; panes.a.PBkey = "";
-    const wasNormal = touchText(panes.b).startsWith("Normal");
-    turnCylinder(wasNormal ? d3R(0, 0, -90) : ident());
-  }
-  layout(); setHover(hoverTarget, true);
+// turn the cylinder; unrolled, look square at the map again
+async function turnCylinder(Ct) {
+  showCylinder();
+  await animateTo(S.G, Ct, 1000, panes.b);
   if (S.step === 3) faceSheet();
 }
-function selectPane(id) { if (S.compare && S.sel !== id) { S.sel = id; dirty = true; } }
-// turn the selected view's cylinder; unrolled, look square at the map again
-async function turnCylinder(Ct) {
-  const p = selPane();
-  showCylinder();
-  await animateTo(S.G, Ct, 1000, p);
-  if (S.step === 3 && p === panes.b) faceSheet();
+
+// ---------------- frozen map ----------------
+// Freeze keeps the wall map as it is now, drawn flat beside the live view. Nothing in the live view changes it;
+// routes added later are drawn on it too. Freeze again replaces it; Unfreeze removes it.
+const fz = $("frozen"), fzBox = $("frozenBox");
+let fzKey = "", fzProj = null;
+function setFrozen(on) {
+  S.frozen = on ? { M: M(), label: touchText(panes.b) } : null;
+  fzBox.hidden = !on; $("bench").classList.toggle("frozen", !!on);
+  if (on) $("frozenLabel").textContent = "Frozen · " + S.frozen.label;
+  fzKey = ""; dirty = true;
 }
+function drawFrozen() {
+  if (!S.frozen) return;
+  const r = fz.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+  const key = [S.frozen.label, S.frozen.M, routesVer, r.width, r.height].join("|");
+  if (key === fzKey || r.width < 10) return;
+  fzKey = key;
+  fz.width = Math.round(r.width * dpr); fz.height = Math.round(r.height * dpr);
+  const g = fz.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = COL.bg; g.fillRect(0, 0, r.width, r.height);
+  const k = 0.94 * Math.min(r.width / (2 * Math.PI), (r.height - 40) / (2 * MAXH));
+  const cx = r.width / 2, cy = 20 + (r.height - 20) / 2, mw = 2 * Math.PI * k, mh = 2 * MAXH * k;
+  const box = [[cx - mw / 2, cy - mh / 2], [cx + mw / 2, cy + mh / 2]];
+  fzProj = d3.geoMercator().rotate(euler(S.frozen.M)).scale(k).translate([cx, cy]).precision(0.4).clipExtent(box);
+  const path = d3.geoPath(fzProj, g);
+  g.fillStyle = "#1f4552"; g.fillRect(box[0][0], box[0][1], mw, mh);
+  g.beginPath(); path(LANDGEO); g.fillStyle = "#d9cfb4"; g.fill();
+  g.beginPath(); path(BORDERS); g.strokeStyle = "rgba(40,40,30,0.45)"; g.lineWidth = 0.6; g.stroke();
+  g.beginPath(); path(d3.geoGraticule().step([15, 15])()); g.strokeStyle = COL.earth; g.globalAlpha = 0.25; g.lineWidth = 0.6; g.stroke(); g.globalAlpha = 1;
+  g.beginPath(); path({ type: "LineString", coordinates: parallel(0) }); path({ type: "LineString", coordinates: meridian(0) }); g.strokeStyle = COL.earth; g.lineWidth = 1.2; g.stroke();
+  g.lineCap = "round";
+  for (const rt of S.routes) {
+    for (const [coords, col] of [[densify([rt.a, rt.b], 1), COL.gc], [rhumbPoints(rt.a, rt.b, 160), COL.rh]]) {
+      g.beginPath(); path({ type: "LineString", coordinates: coords }); g.strokeStyle = col; g.lineWidth = 2.5; g.stroke();
+    }
+  }
+  g.font = "600 11px IBM Plex Sans, system-ui, sans-serif"; g.textAlign = "center";
+  for (const rt of S.routes) for (const [c, name] of [[rt.a, rt.an], [rt.b, rt.bn]]) {
+    const xy = fzProj(c); if (!xy || xy[1] < box[0][1] || xy[1] > box[1][1]) continue;
+    g.fillStyle = COL.ink; g.beginPath(); g.arc(xy[0], xy[1], 3, 0, 2 * Math.PI); g.fill();
+    g.lineWidth = 3; g.strokeStyle = "rgba(12,19,23,.9)"; g.strokeText(name, xy[0], xy[1] - 7); g.fillText(name, xy[0], xy[1] - 7);
+  }
+  g.strokeStyle = COL.a; g.lineWidth = 1; g.strokeRect(box[0][0] + 0.5, box[0][1] + 0.5, mw - 1, mh - 1);
+}
+// a click on the frozen map adds a point, like a click on the live one
+fz.addEventListener("click", e => {
+  if (!fzProj) return;
+  const r = fz.getBoundingClientRect(), c = fzProj.invert([e.clientX - r.left, e.clientY - r.top]);
+  if (c && isFinite(c[0]) && Math.abs(c[1]) <= MAXLAT) pickPoint(c, clickName(c));
+});
+new ResizeObserver(() => { fzKey = ""; dirty = true; }).observe(fz);
 
 // ---------------- input ----------------
 const HINT1 = "Drag the globe or cylinder to turn it · Shift-drag: both · Right-drag: look around · Click: add a point";
-const HINT2 = "A and B move together · Click a view to pick its cylinder · Drag the globe or cylinder to turn it";
 const HOVER_HINT = {
   globe: "Drag: turn the globe · Click: add a point · Shift-drag: turn both",
   sheet: "Drag: turn the globe under the map · Click: add a point",
@@ -593,7 +600,7 @@ function setHover(t, force) {
   if (t === hoverTarget && !force) return;
   hoverTarget = t; dirty = true;
   cv.style.cursor = t === "view" || !t ? "default" : "grab";
-  $("dragHint").textContent = S.compare ? HINT2 : t ? HOVER_HINT[t] : HINT1;
+  $("dragHint").textContent = t ? HOVER_HINT[t] : HINT1;
 }
 
 const cv = renderer.domElement;
@@ -604,14 +611,13 @@ const pointers = new Map();
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 // what's under the pointer: the unrolled sheet first, then the globe, then the cylinder around it
 function hitTest(x, y) {
-  const r = cv.getBoundingClientRect(), px = x - r.left, py = y - r.top, ra = panes.a.rect;
-  const pane = S.compare && ra.x <= px && px < ra.x + ra.w && ra.y <= py && py < ra.y + ra.h ? panes.a : panes.b;
-  return withPane(pane, () => Object.assign(hitPane(px, py, pane), { pane }));
+  const r = cv.getBoundingClientRect(), pane = panes.b;
+  return withPane(pane, () => Object.assign(hitPane(x - r.left, y - r.top, pane), { pane }));
 }
 function hitPane(px, py, pane) {
   const pr = pane.rect;
   ndc.set(((px - pr.x) / pr.w) * 2 - 1, -((py - pr.y) / pr.h) * 2 + 1);
-  paneCamera(pane); scene.updateMatrixWorld(); ray.setFromCamera(ndc, camera);
+  paneCamera(); scene.updateMatrixWorld(); ray.setFromCamera(ndc, camera);
   if (S.s > 1.5) { const t = sheetHit(ray.ray); if (t) return { target: "sheet", t }; }
   const hg = ray.intersectObject(globeMesh, false)[0];
   if (hg) return { target: "globe", point: hg.point };
@@ -642,7 +648,6 @@ cv.addEventListener("pointerdown", e => {
     pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), dist: cam.dist }; drag = null; return;
   }
   const hit = hitTest(e.clientX, e.clientY);
-  selectPane(hit.pane.id);
   const target = e.button === 2 ? "view" : e.shiftKey && S.cylOn ? "both" : hit.target;
   drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, target, hit, button: e.button, moved: false };
   if (target !== "view") cv.style.cursor = "grabbing";
@@ -662,7 +667,7 @@ cv.addEventListener("pointermove", e => {
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
   if (drag.target === "view") { cam.yaw -= dx * 0.008; cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch + dy * 0.008)); placeCamera(); dirty = true; return; }
 
-  paneCamera(drag.hit.pane);
+  paneCamera();
   const e2 = camera.matrixWorld.elements;
   const right = fromThree([e2[0], e2[1], e2[2]]), up = fromThree([e2[4], e2[5], e2[6]]);
   const R = mmul(axisAngle(up, dx * 0.008), axisAngle(right, dy * 0.008));
@@ -688,25 +693,23 @@ cv.addEventListener("wheel", e => { e.preventDefault(); cam.dist = Math.max(4, M
 // controls
 for (const p of ["g", "c"]) for (let i = 0; i < 3; i++) $(p + i).addEventListener("input", () => {
   const v = [0, 1, 2].map(j => +$(p + j).value);
-  if (p === "g") S.G = d3R(...v); else { selPane().C = d3R(...v); showCylinder(); }
+  if (p === "g") S.G = d3R(...v); else { panes.b.C = d3R(...v); showCylinder(); }
   dirty = true;
 });
 for (const i of [0, 2, 3]) $("st" + i).onclick = () => setStep(i);
 $("pr-normal").onclick = () => turnCylinder(ident());
 $("pr-trans").onclick = () => turnCylinder(d3R(0, 0, -90));
 $("pr-obl").onclick = () => turnCylinder(d3R(0, 0, -45));
-$("compare").onclick = () => setCompare(!S.compare);
-$("paneA").querySelector("button").onclick = () => selectPane("a");
-$("paneB").querySelector("button").onclick = () => selectPane("b");
+$("freeze").onclick = () => setFrozen(true);
+$("unfreeze").onclick = () => setFrozen(false);
 $("mapOpacity").addEventListener("input", e => { S.mapOpacity = +e.target.value / 100; $("mapo").textContent = e.target.value + "%"; dirty = true; });
 $("opacity").addEventListener("input", e => { S.globeOpacity = +e.target.value / 100; $("opo").textContent = e.target.value + "%"; dirty = true; });
 $("clearRoutes").onclick = () => { S.routes = []; S.from = null; $("from").value = ""; $("to").value = ""; routesChanged(); };
-// Reset: this step's starting state (globe, cylinder, view, opacity); step and routes stay
+// Reset: this step's starting state (globe, cylinder, view, opacity); step, routes and the frozen map stay
 $("reset").onclick = async () => {
   S.from = null; $("from").value = ""; $("to").value = "";
   S.globeOpacity = 0.55; $("opacity").value = 55; $("opo").textContent = "55%";
   S.mapOpacity = 0.85; $("mapOpacity").value = 85; $("mapo").textContent = "85%";
-  if (S.compare) animateTo(ident(), ident(), 700, panes.a);
   if (S.step === 3) { await animateTo(ident(), ident(), 700, panes.b); faceSheet(); }
   else { animateTo(ident(), ident(), 700, panes.b); cameraTo({ ...CAM0, dist: S.step === 0 ? CAM0.dist : CAMCYL }, [0, 1, 0], 700); }
 };
@@ -723,18 +726,14 @@ function resize() {
 }
 new ResizeObserver(resize).observe(bench);
 function frame() {
-  // draw only when something changed (the canvas keeps its last picture); each view in its own part of the canvas
+  // draw only when something changed (the canvas keeps its last picture)
   if (dirty) {
     dirty = false;
-    const H = bench.getBoundingClientRect().height;
-    renderer.setScissorTest(S.compare);
-    for (const p of S.compare ? [panes.a, panes.b] : [panes.b]) {
-      cur = p; paneCamera(p); rebuild();
-      const r = p.rect;
-      renderer.setViewport(r.x, H - r.y - r.h, r.w, r.h); renderer.setScissor(r.x, H - r.y - r.h, r.w, r.h);
-      renderer.render(scene, camera);
-    }
-    cur = panes.b;
+    cur = panes.b; paneCamera(); rebuild();
+    const r = panes.b.rect;
+    renderer.setViewport(0, 0, r.w, r.h);
+    renderer.render(scene, camera);
+    drawFrozen();
     updateReadout();
   }
   requestAnimationFrame(frame);
@@ -747,6 +746,6 @@ window.addEventListener("DOMContentLoaded", () => requestAnimationFrame(frame));
 // hooks for tests
 window.__lab = { S, M, globe: () => ({ opacity: globeMat.opacity, depthWrite: globeMat.depthWrite }),
   screenOf: p => { scene.updateMatrixWorld(); const v = new THREE.Vector3(...p).project(camera), r = cv.getBoundingClientRect(); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height]; },
-  idle: () => running === 0 && !dirty, setStep, animateTo, panes, alongRoute,
+  idle: () => running === 0 && !dirty, setStep, animateTo, panes, alongRoute, frozen: () => S.frozen,
   map: () => ({ visible: mapMesh.visible, opacity: mapMat.opacity }),
   counts: () => Object.assign(Object.fromEntries(Object.entries(L).map(([k, o]) => [k, o.geometry.drawRange.count])), { routes: routeGroup.children.length }) };

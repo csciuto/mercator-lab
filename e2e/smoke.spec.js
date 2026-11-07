@@ -26,7 +26,7 @@ test('opens on a plain globe: no cylinder, nothing projected @desktop', async ({
   page.on('pageerror', (e) => errors.push(e.message));
   await page.setViewportSize({ width: 1200, height: 630 });
   await page.goto(APP + (process.env.UPDATE_PREVIEW ? BOS_ROM + ';-0.13,51.51,139.69,35.69' : ''));
-  await expect(page.locator('#bench canvas')).toBeVisible();
+  await expect(page.locator('#live canvas')).toBeVisible();
   await expect(page.locator(READY).first()).toBeVisible();
   const c = await counts(page);
   expect(c.wire + c.coast).toBe(0);
@@ -149,20 +149,30 @@ test('Unroll: the map faces you and a click adds a point; Reset stays on Unroll 
   await expect(page.locator(ROUTE)).toHaveCount(2);
 });
 
-test('Compare: A keeps your cylinder, B starts different; the selected view takes the Cylinder controls', async ({ page }) => {
+test('Freeze keeps a still copy of the wall map; only the live view changes', async ({ page }) => {
   await page.goto(APP + BOS_ROM);
-  await page.locator('#compare').click(); await idle(page);
-  await expect(page.locator('#paneA button')).toHaveText('A · Normal · touches the equator');
-  await expect(page.locator('#paneB button')).toHaveText('B · Transverse · touches the 0° meridian');
-  await expect(page.locator('#paneB')).toHaveClass(/sel/);
-  await expect(page.locator('#dragHint')).toContainText('A and B move together');
-  await page.locator('#paneA button').click();
-  await expect(page.locator('#paneA')).toHaveClass(/sel/);
-  await page.locator('#pr-obl').click(); await idle(page);
-  await expect(page.locator('#paneA button')).toContainText('Oblique 45°');
-  await expect(page.locator('#paneB button')).toContainText('Transverse');
-  await page.locator('#compare').click(); await idle(page);
-  await expect(page.locator('#paneA')).toBeHidden();
+  await page.locator('#freeze').click(); await idle(page);
+  await expect(page.locator('#frozen')).toBeVisible();
+  await expect(page.locator('#frozenLabel')).toHaveText('Frozen · Normal · touches the equator');
+  const before = await page.evaluate(() => JSON.stringify(window.__lab.frozen()));
+  await page.locator('#pr-trans').click(); await idle(page);
+  await page.locator('#g0').fill('60'); await idle(page);
+  await expect(page.locator('#touch')).toContainText('Transverse');
+  expect(await page.evaluate(() => JSON.stringify(window.__lab.frozen()))).toBe(before);
+  await expect(page.locator('#frozenLabel')).toHaveText('Frozen · Normal · touches the equator');
+  await page.locator('#freeze').click(); await idle(page);            // Freeze again replaces it
+  await expect(page.locator('#frozenLabel')).toContainText('Transverse');
+  await page.locator('#unfreeze').click(); await idle(page);
+  await expect(page.locator('#frozen')).toBeHidden();
+});
+
+test('a click on the frozen map adds a point @desktop', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(APP);
+  await page.locator('#freeze').click(); await idle(page);
+  const box = await page.locator('#frozen').boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + 20 + (box.height - 20) / 2);   // map center: 0°, 0°
+  await expect(page.locator('#from')).toHaveValue(/0\.\d+°/);
 });
 
 test('Cylinder along this route: the cylinder touches along the route, so its great circle is straight', async ({ page }) => {

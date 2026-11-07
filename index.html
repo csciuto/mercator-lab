@@ -78,14 +78,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 0; }
 #bench { position: relative; min-width: 0; min-height: 0; }
-.pane { position: absolute; border: 1px solid var(--line); pointer-events: none; box-sizing: border-box; }
-.pane.sel { border: 2px solid var(--cyl); }
-.pane button { position: absolute; right: 10px; top: 10px; pointer-events: auto; font: 500 12px var(--f-body); color: var(--ink); background: rgba(17,27,32,.88); border: 1px solid var(--line); border-radius: 5px; padding: 5px 9px; cursor: pointer; }
-.pane.sel button { border-color: var(--cyl); color: var(--cyl); }
-#compare[aria-pressed="true"] { border-color: var(--cyl); color: var(--cyl); }
+#bench { display: grid; grid-template-columns: 1fr; }
+#bench.frozen { grid-template-columns: 1fr 1fr; }
+#live { position: relative; min-width: 0; min-height: 0; }
+#frozenBox { position: relative; min-width: 0; min-height: 0; border-left: 1px solid var(--line); }
+#frozenBox canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+#frozenLabel { position: absolute; left: 14px; top: 12px; color: var(--a); pointer-events: none; }
 #routes .along { margin-top: 4px; font: 500 11.5px var(--f-body); color: var(--cyl); background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 2px 7px; cursor: pointer; }
 #routes .along:hover { border-color: var(--cyl); }
-#bench canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+#live canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .overlay { position: absolute; left: 16px; top: 14px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; max-width: calc(100% - 32px); }
 .overlay > * { pointer-events: auto; }
 .hint { color: var(--muted); font-size: 12px; line-height: 1.45; max-width: 46ch; }
@@ -110,7 +111,7 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
 #routes .x { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 4px; align-self: start; }
 #routes .x:hover { color: var(--b); }
 .note { margin: 0; color: var(--muted); font-size: 12px; }
-.cylOff .cylOnly { display: none; }
+#live.cylOff .cylOnly { display: none; }
 .seg .sw { display: inline-block; margin-right: 6px; vertical-align: middle; }
 
 #side { min-height: 0; overflow-y: auto; border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; }
@@ -137,6 +138,8 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
   #app { height: auto; min-height: 100%; }
   main { grid-template-columns: 1fr; }
   #bench { height: 62vh; min-height: 360px; }
+  #bench.frozen { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; height: 92vh; }
+  #frozenBox { border-left: 0; border-top: 1px solid var(--line); }
   #side { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
     }
 @media (max-width: 520px) {
@@ -159,14 +162,18 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
       <button id="st2" aria-pressed="false">Project</button>
       <button id="st3" aria-pressed="false">Unroll</button>
     </span>
-    <button class="btn" id="compare" aria-pressed="false" title="Two views side by side, each with its own cylinder">Compare</button>
+    <span class="grp">
+      <button class="btn" id="freeze" title="Keep the wall map as it is now, beside the live view">Freeze</button>
+      <button class="btn" id="unfreeze" disabled>Unfreeze</button>
+    </span>
     <span class="spacer"></span>
     <button class="btn" id="reset" title="Back to this step's start; routes stay">Reset</button>
     <a class="btn" id="help" href="help.html">Help</a>
   </header>
 
   <main>
-    <section id="bench" aria-label="3D globe and cylinder">
+    <section id="bench" aria-label="Globe, cylinder and wall map">
+      <div id="live">
       <div class="overlay" id="overlay">
         <div class="grp" style="flex-wrap:wrap;gap:6px 16px">
         <label class="inl" for="opacity">Globe opacity <input type="range" id="opacity" min="0" max="100" step="1" value="55"><output id="opo">55%</output></label>
@@ -174,14 +181,17 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
         </div>
         <div class="hint" id="dragHint"></div>
       </div>
-      <div class="pane" id="paneA" hidden><button aria-pressed="false">A</button></div>
-      <div class="pane" id="paneB" hidden><button aria-pressed="true">B</button></div>
       <div class="legend">
         <span><i class="sw earth"></i>Earth's grid</span>
         <span class="cylOnly"><i class="sw cyl"></i>Cylinder</span>
         <span class="cylOnly"><i class="sw seam"></i>Seam</span>
         <span><i class="sw gcl"></i>Great circle</span>
         <span><i class="sw rhl"></i>Rhumb line</span>
+      </div>
+      </div>
+      <div id="frozenBox" hidden>
+        <span class="lbl" id="frozenLabel">Frozen</span>
+        <canvas id="frozen" aria-label="Frozen wall map"></canvas>
       </div>
     </section>
 
@@ -210,7 +220,7 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
       </div>
 
       <div class="sec" id="cylSec">
-        <h2><span class="dot" style="background:var(--cyl)"></span>Cylinder<span id="cylWhich"></span></h2>
+        <h2><span class="dot" style="background:var(--cyl)"></span>Cylinder</h2>
         <span class="seg" role="group" aria-label="Cylinder presets">
           <button id="pr-normal">Normal</button>
           <button id="pr-trans">Transverse</button>
