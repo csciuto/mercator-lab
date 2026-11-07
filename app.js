@@ -450,7 +450,7 @@ function rebuild() {
 function touchText(p) {
   return withPane(p, () => {
     const Mm = M(), r = S.routes.find(r => onCylEquator(Mm, r.a, r.b));
-    return r ? `Touches along ${r.an} → ${r.bn}` : touchLabel(Mm);
+    return r ? `Along ${r.an} → ${r.bn} · touches the route` : touchLabel(Mm);
   });
 }
 function updateReadout() {
@@ -558,10 +558,15 @@ function layout() {
   camera.aspect = panes.b.rect.w / Math.max(1, panes.b.rect.h); camera.updateProjectionMatrix();
   dirty = true;
 }
+// Compare: A keeps the cylinder you had; B starts different (Transverse, or Normal if you had something else)
 function setCompare(on) {
   S.compare = on; S.sel = "b";
-  if (on) { panes.a.C = panes.b.C.map(r => r.slice()); panes.a.mapKey = ""; panes.a.PBkey = ""; showCylinder(); }
-  layout();
+  if (on) {
+    panes.a.C = panes.b.C.map(r => r.slice()); panes.a.mapKey = ""; panes.a.PBkey = "";
+    const wasNormal = touchText(panes.b).startsWith("Normal");
+    turnCylinder(wasNormal ? d3R(0, 0, -90) : ident());
+  }
+  layout(); setHover(hoverTarget, true);
   if (S.step === 3) faceSheet();
 }
 function selectPane(id) { if (S.compare && S.sel !== id) { S.sel = id; dirty = true; } }
@@ -574,7 +579,8 @@ async function turnCylinder(Ct) {
 }
 
 // ---------------- input ----------------
-const HINT = "Drag the globe or cylinder to turn it · Shift-drag: both · Right-drag: look around · Click: add a point";
+const HINT1 = "Drag the globe or cylinder to turn it · Shift-drag: both · Right-drag: look around · Click: add a point";
+const HINT2 = "A and B move together · Click a view to pick its cylinder · Drag the globe or cylinder to turn it";
 const HOVER_HINT = {
   globe: "Drag: turn the globe · Click: add a point · Shift-drag: turn both",
   sheet: "Drag: turn the globe under the map · Click: add a point",
@@ -582,12 +588,12 @@ const HOVER_HINT = {
   view: "Drag: look around · Double-click: reset the view",
 };
 let hoverTarget = null;
-$("dragHint").textContent = HINT;
+$("dragHint").textContent = HINT1;
 function setHover(t, force) {
   if (t === hoverTarget && !force) return;
   hoverTarget = t; dirty = true;
   cv.style.cursor = t === "view" || !t ? "default" : "grab";
-  $("dragHint").textContent = t ? HOVER_HINT[t] : HINT;
+  $("dragHint").textContent = S.compare ? HINT2 : t ? HOVER_HINT[t] : HINT1;
 }
 
 const cv = renderer.domElement;

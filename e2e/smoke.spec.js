@@ -121,7 +121,7 @@ test('Project brings the cylinder with the map on it; Globe takes both away', as
   await page.locator('#mapOpacity').fill('30'); await idle(page);
   expect((await page.evaluate(() => window.__lab.map())).opacity).toBeCloseTo(0.3);
   await page.locator('#pr-trans').click(); await idle(page);
-  await expect(page.locator('#touch')).toHaveText('Touches along the 0° meridian');
+  await expect(page.locator('#touch')).toHaveText('Transverse · touches the 0° meridian');
   await page.locator('#st0').click(); await idle(page);
   expect((await page.evaluate(() => window.__lab.map())).visible).toBe(false);   // no fill without the cylinder
   c = await counts(page);
@@ -149,18 +149,18 @@ test('Unroll: the map faces you and a click adds a point; Reset stays on Unroll 
   await expect(page.locator(ROUTE)).toHaveCount(2);
 });
 
-test('Compare: two views, each with its own cylinder; the selected one takes the Cylinder controls', async ({ page }) => {
+test('Compare: A keeps your cylinder, B starts different; the selected view takes the Cylinder controls', async ({ page }) => {
   await page.goto(APP + BOS_ROM);
   await page.locator('#compare').click(); await idle(page);
-  await expect(page.locator('#paneA button')).toBeVisible();
+  await expect(page.locator('#paneA button')).toHaveText('A · Normal · touches the equator');
+  await expect(page.locator('#paneB button')).toHaveText('B · Transverse · touches the 0° meridian');
   await expect(page.locator('#paneB')).toHaveClass(/sel/);
-  await page.locator('#pr-trans').click(); await idle(page);
-  await expect(page.locator('#paneA button')).toContainText('equator');
-  await expect(page.locator('#paneB button')).toContainText('0° meridian');
+  await expect(page.locator('#dragHint')).toContainText('A and B move together');
   await page.locator('#paneA button').click();
   await expect(page.locator('#paneA')).toHaveClass(/sel/);
-  await expect(page.locator('#touch')).toHaveText('Touches along the equator');
-  await page.locator('#st3').click(); await idle(page);
+  await page.locator('#pr-obl').click(); await idle(page);
+  await expect(page.locator('#paneA button')).toContainText('Oblique 45°');
+  await expect(page.locator('#paneB button')).toContainText('Transverse');
   await page.locator('#compare').click(); await idle(page);
   await expect(page.locator('#paneA')).toBeHidden();
 });
@@ -168,7 +168,7 @@ test('Compare: two views, each with its own cylinder; the selected one takes the
 test('Cylinder along this route: the cylinder touches along the route, so its great circle is straight', async ({ page }) => {
   await page.goto(APP + BOS_ROM);
   await page.locator('#routes .along').first().click(); await idle(page);
-  await expect(page.locator('#touch')).toHaveText('Touches along Boston → Rome');
+  await expect(page.locator('#touch')).toHaveText('Along Boston → Rome · touches the route');
   await expect(page.locator('#st2')).toHaveAttribute('aria-pressed', 'true');
 });
 

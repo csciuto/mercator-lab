@@ -71,14 +71,14 @@ function cylLat(h) { return 2 * Math.atan(Math.exp(h)) - Math.PI / 2; }
 function touchLabel(M) {
   var ax = mv(mT(M), [0, 0, 1]);                         // cylinder axis in Earth coordinates
   var tilt = deg(Math.acos(Math.min(1, Math.abs(ax[2])))); // 0 = axis through the poles
-  if (tilt < 0.5) return "Touches along the equator";
+  if (tilt < 0.5) return "Normal · touches the equator";
   if (tilt > 89.5) {
     var lon = wrapLon(deg(Math.atan2(ax[1], ax[0])) + 90);
     if (lon > 90) lon -= 180; else if (lon <= -90) lon += 180;
     var r = Math.round(lon);
-    return "Touches along the " + (r === 0 ? "0°" : Math.abs(r) + "°" + (r > 0 ? "E" : "W")) + " meridian";
+    return "Transverse · touches the " + (r === 0 ? "0°" : Math.abs(r) + "°" + (r > 0 ? "E" : "W")) + " meridian";
   }
-  return "Touches along a circle " + Math.round(tilt) + "° off the equator";
+  return "Oblique " + Math.round(tilt) + "° · touches a tilted circle";
 }
 // The cylinder that touches the globe along the great circle through a and b (lon/lat), with the route's
 // midpoint at the map's center and a → b running east. G is the globe's rotation. Its map draws the great
