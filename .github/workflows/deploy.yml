@@ -22,8 +22,3 @@ jobs:
     uses: csciuto/app-template/.github/workflows/app.yml@v1
     with:
       stamp: index.html help.html
-      # until the shared v1 tag includes it: ?v=<version> on local scripts, so a new page never runs old cached ones
-      after-build: |
-        V=$(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' version.json)
-        sed -i -E "s#(src|href)=\"([^\":?]+\.(js|css))\"#\1=\"\2?v=$V\"#g" index.html help.html
-        grep -c "?v=$V" index.html
