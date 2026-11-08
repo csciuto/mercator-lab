@@ -41,27 +41,21 @@
 <main>
   <section id="steps">
     <h2>Globe, cylinder, wall map</h2>
-    <p>A Mercator map is a globe wrapped in a cylinder, projected onto it, and unrolled. The three steps at the top
-      walk through it.</p>
-    <ol>
-      <li><b>Globe</b>: the Earth alone.</li>
-      <li><b>Project</b>: a cylinder appears around the globe, touching it along the cylinder's equator, and the map
-        moves out onto it. Heights follow ln tan(45° + latitude/2), so angles stay
-        true and areas grow toward the poles.</li>
-      <li><b>Unroll</b>: the cylinder is cut at the seam and laid flat: the wall map, facing you, map north up.</li>
-    </ol>
-    <img src="help-unroll.png" alt="The unrolled wall map with routes from Boston to Rome and London to Tokyo." width="1200" height="740" loading="lazy">
+    <p>A Mercator map is a globe wrapped in a cylinder, projected onto it, and unrolled. On the left, the globe sits
+      in the cylinder, touching it along the cylinder's equator, with the map projected out onto it. Heights follow
+      ln tan(45° + latitude/2), so angles stay true and areas grow toward the poles. On the right is the wall map:
+      the cylinder cut at the seam and laid flat, map north up. Turn the globe or the cylinder and the wall map
+      redraws.</p>
+    <img src="help-map.png" alt="The globe in its cylinder beside the wall map, with routes from Boston to Rome and London to Tokyo." width="860" height="689" loading="lazy">
     <ul>
       <li>Drag the globe or the cylinder to turn it; Shift-drag turns both; right-drag looks around. Scroll or
         pinch to zoom; double-click empty space to reset the view.</li>
       <li>The map depends only on how the globe sits inside the cylinder. <b>Normal</b> touches along the equator,
         <b>Transverse</b> along a meridian, <b>Oblique</b> along a tilted circle. Turning both together changes
         nothing.</li>
-      <li><b>Globe opacity</b> and <b>Map opacity</b> set how see-through the globe and the filled map on the cylinder are.</li>
-      <li><b>Freeze</b> keeps the wall map as it is now, drawn flat beside the live view. Nothing you do to the
-        globe or cylinder changes it, so you can compare: freeze Normal, then try Transverse or a route's cylinder.
-        Routes you add appear on both. <b>Freeze</b> again replaces it; <b>Unfreeze</b> removes it.</li>
-      <li><b>Reset</b> puts the globe, cylinder and view back where this step starts; the step and routes stay.</li>
+      <li><b>Opacity</b> under Globe and under Cylinder sets how see-through each one is. At 0 the cylinder is
+        hidden and the globe stands alone.</li>
+      <li><b>Reset</b> puts the globe, cylinder, view and opacity back to the start; routes stay.</li>
     </ul>
   </section>
 
@@ -72,12 +66,12 @@
       straight on a Mercator map, and longer.</p>
     <ul>
       <li>Type a city or coordinates (<kbd>42.36, -71.06</kbd>, <kbd>42.36N 71.06W</kbd>) in <b>From</b> and
-        <b>To</b>, or click the globe or the map: the first click is From, the second To.</li>
-      <li>Routes ride on the globe through every step. The list gives both distances and how much longer the rhumb
+        <b>To</b>, or click the globe or the wall map: the first click is From, the second To.</li>
+      <li>Routes are drawn on the globe, the cylinder and the wall map. The list gives both distances and how much longer the rhumb
         line is.</li>
       <li><b>Cylinder along this route</b> turns the cylinder so it touches the globe along that route's great
         circle. The great circle becomes the straight center line of the map and the rhumb line curves: which one is
-        straight depends on where the cylinder touches. Try it after Freeze: the frozen Normal map beside the route's cylinder.</li>
+        straight depends on where the cylinder touches. Normal brings the straight rhumb line back.</li>
       <li>The address keeps your routes, so you can bookmark or share them.</li>
     </ul>
   </section>

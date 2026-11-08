@@ -4,16 +4,14 @@
 
 Built with [Claude Code](https://claude.com/claude-code).
 
-A globe inside a Mercator cylinder: project the map onto it, unroll it into a wall map, and draw routes that
-follow along.
+A globe inside a Mercator cylinder with the map projected onto it, beside the wall map that cylinder makes. Turn
+either one and the wall map redraws. Routes follow along on all three.
 
-- **Steps:** Globe → Project → Unroll.
 - **Routes:** From and To take a city (6,000+ of 100,000 people or more) or coordinates (`42.36, -71.06`,
   `42.36N 71.06W`), or a click on the globe or map. Each route is drawn as a great circle and a rhumb line, with
   both distances and the rhumb line's extra.
-- **Globe and cylinder:** turn either one, or both. Normal, transverse and oblique presets. Globe opacity.
-- **Freeze:** keep a still copy of the wall map beside the live view to compare against. **Cylinder along this
-  route** makes a route's great circle the map's straight center line.
+- **Globe and cylinder:** turn either one, or both. Normal, transverse and oblique presets. Globe and cylinder opacity, set separately.
+- **Cylinder along this route** makes a route's great circle the map's straight center line.
 
 Routes live in the address (`#routes=lon,lat,lon,lat;…`). Older `#lines=` links and `/unroll/` links still open.
 
@@ -27,7 +25,7 @@ Routes live in the address (`#routes=lon,lat,lon,lat;…`). Older `#lines=` link
 | `world.js` | Natural Earth 110m countries (world-atlas TopoJSON), inlined so nothing is fetched. |
 | `cities.js` | The labeled cities and when each appears as you zoom; `cityAt` names a point. |
 | `places.js` | Cities for search, from GeoNames (CC BY 4.0). Built from `cities15000.txt`, keeping 100,000+ people. |
-| `index.html`, `app.js` | The app (three.js r128): the 3D scene, routes, controls. |
+| `index.html`, `app.js` | The app: the 3D globe and cylinder (three.js r128), the wall map (d3), routes, controls. |
 | `search.js` | The From and To boxes. |
 | `help.html` | The help page. |
 | `unroll/index.html` | Redirect for old links. |

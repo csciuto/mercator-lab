@@ -1,5 +1,5 @@
-// Mercator Lab: a globe, a Mercator cylinder around it, the map projected onto the cylinder, and the cylinder
-// unrolled into a wall map. Routes (great circle and rhumb line together) ride on the globe through every step.
+// Mercator Lab: on the left a globe inside a Mercator cylinder with the map projected onto it; on the right the
+// wall map that cylinder makes, redrawn as either turns. Routes (great circle and rhumb line together) on all three.
 const $ = id => document.getElementById(id);
 const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -28,13 +28,11 @@ const SRC = {
   eq: toVecs([parallel(0), meridian(0)]),
 };
 // ---------------- state ----------------
-// step: 0 globe, 2 projected, 3 unrolled (the buttons; 1, an empty cylinder, is no longer offered). s: 0 on the globe → 1 on the cylinder → 2 flat (animated).
 const S = {
   G: ident(),               // globe rotation, geo frame (each view's cylinder rotation is in panes)
-  step: 0, s: 0, cylOn: false,
-  globeOpacity: 0.55, mapOpacity: 0.85,
+  s: 1,                     // the projected map sits on the cylinder
+  globeOpacity: 0.55, cylOpacity: 0.85,
   routes: [], from: null,   // from: {c, name} waiting for a To
-  frozen: null,             // {M, label}: a still copy of the wall map, shown beside the live view
 };
 let dirty = true, routesVer = 0;
 // The live view: its cylinder, projection cache and map picture.
@@ -50,7 +48,7 @@ function withPane(p, f) { const prev = cur; cur = p; try { return f(); } finally
 const M = () => mmul(mT(S.C), S.G); // the globe in the cylinder's frame: all the map depends on
 
 // ---------------- three.js scene ----------------
-const bench = $("live");   // the live 3D view (the frozen map sits beside it)
+const bench = $("live");   // the 3D view (the wall map sits beside it)
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
 renderer.setClearColor(new THREE.Color(COL.bg), 1);
@@ -60,8 +58,8 @@ scene.fog = new THREE.Fog(new THREE.Color(COL.bg), 6, 16);
 const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
 const cam = { yaw: 0.55, pitch: 0.22, dist: 14 };
 const baseUp = new THREE.Vector3(0, 1, 0);
-const CAM0 = { yaw: 0.55, pitch: 0.22, dist: 6 }; // the globe alone
-const CAMCYL = 14;                                  // room for the cylinder
+const CAMCYL = 14;                                     // room for the cylinder
+const CAM0 = { yaw: 0.55, pitch: 0.22, dist: CAMCYL };
 Object.assign(cam, CAM0);
 function placeCamera() {
   camera.position.set(cam.dist * Math.sin(cam.yaw) * Math.cos(cam.pitch), cam.dist * Math.sin(cam.pitch), cam.dist * Math.cos(cam.yaw) * Math.cos(cam.pitch));
@@ -143,6 +141,7 @@ const cylSurface = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 2 * MAXH, 72,
   new THREE.MeshBasicMaterial({ color: new THREE.Color(COL.cyl), transparent: true, opacity: 0.045, side: THREE.DoubleSide, depthWrite: false, fog: false }));
 cyl.add(cylSurface);
 const cylStatics = [cylSurface];
+const cylBase = new Map();   // material → its opacity at full cylinder opacity
 (() => {
   const ring = []; for (let t = 0; t <= 360; t += 4) ring.push([Math.sin(rad(t)) * 1.004, 0, Math.cos(rad(t)) * 1.004]);
   const eq = tube(ring, COL.cyl, 0.013, true); cyl.add(eq); cylStatics.push(eq);
@@ -188,6 +187,13 @@ function placeMap(s) {
   mapGeo.attributes.position.needsUpdate = true;
 }
 
+// everything on the cylinder fades with the Cylinder opacity slider; lines stay solid down to the default
+function fadeCylinder(k) {
+  const lk = Math.min(1, k / 0.85);
+  for (const m of cylBase.keys()) m.opacity = cylBase.get(m) * lk;
+}
+const onCyl = obj => { const m = obj.material; if (!cylBase.has(m)) cylBase.set(m, m.opacity); };
+
 // dynamic line layers ----
 function dynLines(color, opacity, max = 120000) {
   const g = new THREE.BufferGeometry();
@@ -202,17 +208,17 @@ const L = {
 };
 // routes are drawn as tubes so they stay visible on the busy cylinder; rebuilt whenever the scene changes
 const routeGroup = new THREE.Group(); scene.add(routeGroup);
-const routeMats = { gc: new THREE.MeshBasicMaterial({ color: new THREE.Color(COL.gc), depthWrite: false, transparent: true }), rh: new THREE.MeshBasicMaterial({ color: new THREE.Color(COL.rh), depthWrite: false, transparent: true }) };
+const routeMat = c => new THREE.MeshBasicMaterial({ color: new THREE.Color(c), depthWrite: false, transparent: true });
+const routeMats = [{ gc: routeMat(COL.gc), rh: routeMat(COL.rh) }, { gc: routeMat(COL.gc), rh: routeMat(COL.rh) }]; // on the globe, on the cylinder
+// s 0: on the globe; 1: on the cylinder
 function drawRoutes(s) {
-  routeGroup.children.forEach(m => m.geometry.dispose());
-  routeGroup.clear();
-  const RVs = routeVecs(), radius = 0.014 * Math.max(1, cam.dist / 8);
+  const mats = routeMats[s], RVs = routeVecs(), radius = 0.014 * Math.max(1, cam.dist / 8);
   for (const kind of ["gc", "rh"]) for (const line of RVs[kind]) {
     let run = [];
     const flush = () => {
       if (run.length > 1) {
         const curve = new THREE.CatmullRomCurve3(run.map(p => new THREE.Vector3(...p)));
-        const m = new THREE.Mesh(new THREE.TubeGeometry(curve, run.length * 2, radius, 6, false), routeMats[kind]);
+        const m = new THREE.Mesh(new THREE.TubeGeometry(curve, run.length * 2, radius, 6, false), mats[kind]);
         m.renderOrder = 4; m.frustumCulled = false; routeGroup.add(m);
       }
       run = [];
@@ -231,6 +237,10 @@ const ptsGeo = new THREE.BufferGeometry();
 ptsGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(600 * 3), 3));
 const pts = new THREE.Points(ptsGeo, new THREE.PointsMaterial({ color: new THREE.Color(COL.ink), size: 7, sizeAttenuation: false, depthTest: false, transparent: true }));
 pts.frustumCulled = false; pts.renderOrder = 5; scene.add(pts);
+const pts2Geo = new THREE.BufferGeometry();
+pts2Geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(600 * 3), 3));
+const pts2 = new THREE.Points(pts2Geo, new THREE.PointsMaterial({ color: new THREE.Color(COL.ink), size: 6, sizeAttenuation: false, depthTest: false, transparent: true }));
+pts2.frustumCulled = false; pts2.renderOrder = 5; scene.add(pts2);
 function writeLines(obj, arr, n) {
   const a = obj.geometry.attributes.position;
   a.array.set(arr.subarray(0, n * 3));
@@ -284,7 +294,7 @@ function placeLive(P, s, Gg, Cg, out) {
   }
   return n;
 }
-// frozen segments and the cylinder's own grid live on the cylinder; they only unroll
+// the cylinder's own grid lives on the cylinder
 function placeOnCyl(segs, s, Cg, out) {
   let n = 0; const u = ease(Math.max(0, Math.min(1, s - 1)));
   for (let i = 0; i < segs.length; i += 5) {
@@ -382,7 +392,12 @@ function pickPoint(c, name) {
 function clickName(c) { const p = nearestPlace(PLACES, c, 50); return p ? p[0] : fmtLL(c); }
 
 // ---------------- draw ----------------
+let cylVisuals = false;
 function rebuild() {
+  if (!cylVisuals) { // register what fades with the cylinder (once everything exists)
+    cylStatics.forEach(onCyl); Object.values(L).forEach(onCyl); onCyl(pts2); Object.values(routeMats[1]).forEach(m => cylBase.set(m, 1));
+    cylVisuals = true;
+  }
   const Mr = M();
   const key = JSON.stringify(Mr);
   if (key !== cur.PBkey) {
@@ -393,53 +408,45 @@ function rebuild() {
   const s = S.s, Gg = S.G, Cg = S.C;
   setObjMatrix(globe, Gg); setObjMatrix(cyl, Cg);
 
-  // the globe fades while unrolling
-  const u = Math.max(0, Math.min(1, s - 1));
-  const gop = S.globeOpacity * (1 - u);
+  const gop = S.globeOpacity, k = S.cylOpacity;
   globeMat.opacity = gop;
   const solid = gop > 0.97;
   if (globeMat.depthWrite !== solid) { globeMat.depthWrite = solid; globeMat.side = solid ? THREE.FrontSide : THREE.DoubleSide; globeMat.needsUpdate = true; }
-  cylSurface.material.opacity = hoverTarget === "cyl" ? 0.12 : 0.045;
-  globeLines.forEach(o => { o.visible = u < 0.6; });
-  cyl.visible = S.cylOn;
-  cylStatics.forEach(o => { o.visible = u < 0.02; });
-
-  const on = S.cylOn;
-  // the fill fades in over the second half of Project
-  const fill = on ? S.mapOpacity * Math.max(0, Math.min(1, (s - 0.5) * 2)) : 0;
-  mapMesh.visible = fill > 0.001; mapMat.opacity = fill;
-  if (mapMesh.visible) { drawMap(); placeMap(s); mapMat.map = cur.tex; }
+  cylBase.set(cylSurface.material, hoverTarget === "cyl" ? 0.12 : 0.045);
+  fadeCylinder(k);
+  const on = k > 0.005;
+  cyl.visible = on;
+  mapMesh.visible = on; mapMat.opacity = k;
+  if (on) { drawMap(); placeMap(s); mapMat.map = cur.tex; }
   writeLines(L.wire, scratch, on ? placeOnCyl(WIRE.w, s, Cg, scratch) : 0);
   writeLines(L.wireHi, scratch, on ? placeOnCyl(WIRE.hi, s, Cg, scratch) : 0);
   writeLines(L.seam, scratch, on ? placeOnCyl(WIRE.seam, s, Cg, scratch) : 0);
 
-  // the projected map exists only once Project starts; before that the globe's own texture is the map
-  const whole = s > 0.001;
-  writeLines(L.coast, scratch, whole ? placeLive(PB.coast, s, Gg, Cg, scratch) : 0);
-  writeLines(L.grat, scratch, whole ? placeLive(PB.grat, s, Gg, Cg, scratch) : 0);
-  writeLines(L.eq, scratch, whole ? placeLive(PB.eq, s, Gg, Cg, scratch) : 0);
-  drawRoutes(s);
+  writeLines(L.coast, scratch, on ? placeLive(PB.coast, s, Gg, Cg, scratch) : 0);
+  writeLines(L.grat, scratch, on ? placeLive(PB.grat, s, Gg, Cg, scratch) : 0);
+  writeLines(L.eq, scratch, on ? placeLive(PB.eq, s, Gg, Cg, scratch) : 0);
+  routeGroup.children.forEach(m => m.geometry.dispose());
+  routeGroup.clear();
+  drawRoutes(0); if (on) drawRoutes(1);
 
 
-  // endpoints and labels
-  const pa = ptsGeo.attributes.position.array; let np = 0;
+  // endpoints (on the globe and the cylinder) and labels (on the globe)
   const ends = routesShown().flatMap(r => [r.a, r.b]).concat(S.from ? [S.from.c] : []);
-  for (const c of ends) { const w = placePoint(vec(...c), s); if (w && np < 600) { pa.set(w, np * 3); np++; } }
-  ptsGeo.attributes.position.needsUpdate = true; ptsGeo.setDrawRange(0, np);
+  for (const [geo, at] of [[ptsGeo, 0], [pts2Geo, 1]]) {
+    const pa = geo.attributes.position.array; let np = 0;
+    if (at === 0 || on) for (const c of ends) { const w = placePoint(vec(...c), at); if (w && np < 600) { pa.set(w, np * 3); np++; } }
+    geo.attributes.position.needsUpdate = true; geo.setDrawRange(0, np);
+  }
   syncSprites();
-  // labels sit just off the surface: outward on the globe and cylinder, toward the viewer on the flat map
-  const flatN = toThree(mv(Cg, [1, 0, 0]));
+  // labels sit just off the globe
   const zoom = Math.min(1, cam.dist / CAMCYL); // labels keep about the same size on screen as you zoom in
   earthN.scale.set(earthN.userData.base[0] * zoom, earthN.userData.base[1] * zoom, 1);
   earthN.position.set(0, 1 + 0.25 * zoom, 0);
   for (const sp of sprites) {
     sp.scale.set(sp.userData.base[0] * zoom, sp.userData.base[1] * zoom, 1);
     const lift = sp.userData.lift * zoom;
-    const w = placePoint(sp.userData.at, s);
-    sp.visible = !!w;
-    if (!w) continue;
-    const up = s >= 1.5 ? toThree(mv(Cg, [0, 0, 1])) : [0, 1, 0];
-    const out = s >= 1.5 ? flatN : (n => [w[0] / n, w[1] / n, w[2] / n])(Math.hypot(...w) || 1);
+    const w = placePoint(sp.userData.at, 0);
+    const up = [0, 1, 0], out = (n => [w[0] / n, w[1] / n, w[2] / n])(Math.hypot(...w) || 1);
     sp.position.set(w[0] + out[0] * 0.1 * zoom + up[0] * lift, w[1] + out[1] * 0.1 * zoom + up[1] * lift, w[2] + out[2] * 0.1 * zoom + up[2] * lift);
   }
 }
@@ -457,14 +464,11 @@ function updateReadout() {
   for (const [p, R] of [["g", S.G], ["c", panes.b.C]]) {
     euler(R).forEach((v, i) => { const el = $(p + i); if (document.activeElement !== el) el.value = v.toFixed(1); $(p + i + "o").textContent = v.toFixed(1) + "°"; });
   }
-  for (const i of [0, 2, 3]) $("st" + i).setAttribute("aria-pressed", S.step === i);
-  $("live").classList.toggle("cylOff", !S.cylOn);
-  $("unfreeze").disabled = !S.frozen;
 }
 
 // ---------------- animation ----------------
 // Each channel runs one animation at a time; starting a new one stops the old one.
-const anims = { orient: 0, "orient-a": 0, "orient-b": 0, stage: 0, camera: 0 };
+const anims = { orient: 0, "orient-b": 0, camera: 0 };
 let running = 0;
 function tween(ms, f, channel = "orient") {
   const gen = ++anims[channel];
@@ -480,30 +484,10 @@ function tween(ms, f, channel = "orient") {
     requestAnimationFrame(step);
   });
 }
-// step 0 globe, 1 cylinder, 2 projected, 3 unrolled
-async function setStep(t) {
-  const prev = S.step;
-  S.step = t; if (t >= 1) S.cylOn = true;
-  const target = Math.max(0, t - 1), from = S.s;
-  if (t === 3) faceSheet();
-  else if (prev === 3) cameraTo({ ...CAM0, dist: t === 0 ? CAM0.dist : CAMCYL }, [0, 1, 0]);
-  else if (t === 0 && prev > 0) cameraTo({ ...cam, dist: CAM0.dist }, [0, 1, 0]);
-  else if (t > 0 && prev === 0) cameraTo({ ...cam, dist: Math.max(cam.dist, CAMCYL) }, [0, 1, 0]);
-  dirty = true;
-  await tween(1500 * Math.max(0.3, Math.abs(target - from)), k => { S.s = from + (target - from) * ease(k); }, "stage");
-  if (S.step === 0 && S.s === 0) { S.cylOn = false; dirty = true; }
-}
 function cameraTo(to, up, ms = 900) {
   const from = { ...cam }, u0 = baseUp.clone(), u1 = new THREE.Vector3(...up);
   let dy = to.yaw - from.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
   return tween(ms, k => { const e = ease(k); cam.yaw = from.yaw + dy * e; cam.pitch = from.pitch + (to.pitch - from.pitch) * e; cam.dist = from.dist + (to.dist - from.dist) * e; baseUp.copy(u0).lerp(u1, e).normalize(); placeCamera(); }, "camera");
-}
-// unrolled, the bench is the wall map: look at the sheet straight on, map north up
-function faceSheet() {
-  const C = panes.b.C, n = toThree(mv(C, [1, 0, 0])), up = toThree(mv(C, [0, 0, 1]));
-  const half = Math.tan(rad(camera.fov / 2));
-  const fit = 1 + 1.08 * Math.max(MAXH / half, Math.PI / (half * camera.aspect));
-  return cameraTo({ yaw: Math.atan2(n[0], n[2]), pitch: Math.asin(Math.max(-1, Math.min(1, n[1]))), dist: Math.min(24, fit) }, up);
 }
 // turn the globe to Gt and a view's cylinder to Ct together
 async function animateTo(Gt, Ct, ms = 1000, pane = panes.b) {
@@ -516,8 +500,6 @@ async function animateTo(Gt, Ct, ms = 1000, pane = panes.b) {
   await tween(ms, k => { const e = ease(k); S.G = fromQ(tmp.copy(qG).slerp(qGt, e)); pane.C = fromQ(tmp.copy(qC).slerp(qCt, e)); }, ch);
   if (anims[ch] === gen) { S.G = Gt; pane.C = Ct; dirty = true; }
 }
-// at the Globe step, turning the cylinder brings it out, map projected
-function showCylinder() { if (S.step === 0) setStep(2); }
 
 // ---------------- views ----------------
 function paneCamera() { placeCamera(); camera.updateMatrixWorld(); }
@@ -527,43 +509,33 @@ function layout() {
   camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix();
   dirty = true;
 }
-// turn the cylinder; unrolled, look square at the map again
-async function turnCylinder(Ct) {
-  showCylinder();
-  await animateTo(S.G, Ct, 1000, panes.b);
-  if (S.step === 3) faceSheet();
-}
+const turnCylinder = Ct => animateTo(S.G, Ct, 1000, panes.b);
 
-// ---------------- frozen map ----------------
-// Freeze keeps the wall map as it is now, drawn flat beside the live view. Nothing in the live view changes it;
-// routes added later are drawn on it too. Freeze again replaces it; Unfreeze removes it.
-const fz = $("frozen"), fzBox = $("frozenBox");
-let fzKey = "", fzProj = null;
-function setFrozen(on) {
-  S.frozen = on ? { M: M(), label: touchText(panes.b) } : null;
-  fzBox.hidden = !on; $("bench").classList.toggle("frozen", !!on);
-  if (on) $("frozenLabel").textContent = "Frozen · " + S.frozen.label;
-  fzKey = ""; dirty = true;
-}
-function drawFrozen() {
-  if (!S.frozen) return;
-  const r = fz.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
-  const key = [S.frozen.label, S.frozen.M, routesVer, r.width, r.height].join("|");
-  if (key === fzKey || r.width < 10) return;
-  fzKey = key;
-  fz.width = Math.round(r.width * dpr); fz.height = Math.round(r.height * dpr);
-  const g = fz.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+// ---------------- wall map ----------------
+// The cylinder unrolled: a flat Mercator map of the globe as it sits in the cylinder now, redrawn as either turns.
+const wm = $("wall");
+let wmKey = "", wmProj = null;
+function drawWall() {
+  const r = wm.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+  const key = [JSON.stringify(M()), routesVer, S.from ? S.from.c : "", r.width, r.height].join("|");
+  if (key === wmKey || r.width < 10) return;
+  wmKey = key;
+  wm.width = Math.round(r.width * dpr); wm.height = Math.round(r.height * dpr);
+  const g = wm.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.fillStyle = COL.bg; g.fillRect(0, 0, r.width, r.height);
   const k = 0.94 * Math.min(r.width / (2 * Math.PI), (r.height - 40) / (2 * MAXH));
   const cx = r.width / 2, cy = 20 + (r.height - 20) / 2, mw = 2 * Math.PI * k, mh = 2 * MAXH * k;
   const box = [[cx - mw / 2, cy - mh / 2], [cx + mw / 2, cy + mh / 2]];
-  fzProj = d3.geoMercator().rotate(euler(S.frozen.M)).scale(k).translate([cx, cy]).precision(0.4).clipExtent(box);
-  const path = d3.geoPath(fzProj, g);
+  wmProj = d3.geoMercator().rotate(euler(M())).scale(k).translate([cx, cy]).precision(0.4).clipExtent(box);
+  const path = d3.geoPath(wmProj, g);
   g.fillStyle = "#1f4552"; g.fillRect(box[0][0], box[0][1], mw, mh);
   g.beginPath(); path(LANDGEO); g.fillStyle = "#d9cfb4"; g.fill();
   g.beginPath(); path(BORDERS); g.strokeStyle = "rgba(40,40,30,0.45)"; g.lineWidth = 0.6; g.stroke();
   g.beginPath(); path(d3.geoGraticule().step([15, 15])()); g.strokeStyle = COL.earth; g.globalAlpha = 0.25; g.lineWidth = 0.6; g.stroke(); g.globalAlpha = 1;
   g.beginPath(); path({ type: "LineString", coordinates: parallel(0) }); path({ type: "LineString", coordinates: meridian(0) }); g.strokeStyle = COL.earth; g.lineWidth = 1.2; g.stroke();
+  // the cylinder's own center lines: where it touches the globe, and the map's center meridian
+  g.strokeStyle = COL.cyl; g.lineWidth = 1; g.globalAlpha = 0.8; g.beginPath();
+  g.moveTo(box[0][0], cy); g.lineTo(box[1][0], cy); g.moveTo(cx, box[0][1]); g.lineTo(cx, box[1][1]); g.stroke(); g.globalAlpha = 1;
   g.lineCap = "round";
   for (const rt of S.routes) {
     for (const [coords, col] of [[densify([rt.a, rt.b], 1), COL.gc], [rhumbPoints(rt.a, rt.b, 160), COL.rh]]) {
@@ -571,26 +543,26 @@ function drawFrozen() {
     }
   }
   g.font = "600 11px IBM Plex Sans, system-ui, sans-serif"; g.textAlign = "center";
-  for (const rt of S.routes) for (const [c, name] of [[rt.a, rt.an], [rt.b, rt.bn]]) {
-    const xy = fzProj(c); if (!xy || xy[1] < box[0][1] || xy[1] > box[1][1]) continue;
+  const ends = S.routes.flatMap(rt => [[rt.a, rt.an], [rt.b, rt.bn]]).concat(S.from ? [[S.from.c, S.from.name]] : []);
+  for (const [c, name] of ends) {
+    const xy = wmProj(c); if (!xy || xy[1] < box[0][1] || xy[1] > box[1][1]) continue;
     g.fillStyle = COL.ink; g.beginPath(); g.arc(xy[0], xy[1], 3, 0, 2 * Math.PI); g.fill();
     g.lineWidth = 3; g.strokeStyle = "rgba(12,19,23,.9)"; g.strokeText(name, xy[0], xy[1] - 7); g.fillText(name, xy[0], xy[1] - 7);
   }
-  g.strokeStyle = COL.a; g.lineWidth = 1; g.strokeRect(box[0][0] + 0.5, box[0][1] + 0.5, mw - 1, mh - 1);
+  g.strokeStyle = COL.cyl; g.lineWidth = 1; g.strokeRect(box[0][0] + 0.5, box[0][1] + 0.5, mw - 1, mh - 1);
 }
-// a click on the frozen map adds a point, like a click on the live one
-fz.addEventListener("click", e => {
-  if (!fzProj) return;
-  const r = fz.getBoundingClientRect(), c = fzProj.invert([e.clientX - r.left, e.clientY - r.top]);
+// a click on the wall map adds a point, like a click on the globe
+wm.addEventListener("click", e => {
+  if (!wmProj) return;
+  const r = wm.getBoundingClientRect(), c = wmProj.invert([e.clientX - r.left, e.clientY - r.top]);
   if (c && isFinite(c[0]) && Math.abs(c[1]) <= MAXLAT) pickPoint(c, clickName(c));
 });
-new ResizeObserver(() => { fzKey = ""; dirty = true; }).observe(fz);
+new ResizeObserver(() => { wmKey = ""; dirty = true; }).observe(wm);
 
 // ---------------- input ----------------
 const HINT1 = "Drag the globe or cylinder to turn it · Shift-drag: both · Right-drag: look around · Click: add a point";
 const HOVER_HINT = {
   globe: "Drag: turn the globe · Click: add a point · Shift-drag: turn both",
-  sheet: "Drag: turn the globe under the map · Click: add a point",
   cyl: "Drag: turn the cylinder · Shift-drag: turn both",
   view: "Drag: look around · Double-click: reset the view",
 };
@@ -605,11 +577,11 @@ function setHover(t, force) {
 
 const cv = renderer.domElement;
 cv.addEventListener("contextmenu", e => e.preventDefault());
-cv.addEventListener("dblclick", e => { if (hitTest(e.clientX, e.clientY).target === "view") S.step === 3 ? faceSheet() : cameraTo({ ...CAM0, dist: S.cylOn ? CAMCYL : CAM0.dist }, [0, 1, 0], 600); });
+cv.addEventListener("dblclick", e => { if (hitTest(e.clientX, e.clientY).target === "view") cameraTo(CAM0, [0, 1, 0], 600); });
 let drag = null, pinch = null;
 const pointers = new Map();
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
-// what's under the pointer: the unrolled sheet first, then the globe, then the cylinder around it
+// what's under the pointer: the globe, then the cylinder around it
 function hitTest(x, y) {
   const r = cv.getBoundingClientRect(), pane = panes.b;
   return withPane(pane, () => Object.assign(hitPane(x - r.left, y - r.top, pane), { pane }));
@@ -618,24 +590,12 @@ function hitPane(px, py, pane) {
   const pr = pane.rect;
   ndc.set(((px - pr.x) / pr.w) * 2 - 1, -((py - pr.y) / pr.h) * 2 + 1);
   paneCamera(); scene.updateMatrixWorld(); ray.setFromCamera(ndc, camera);
-  if (S.s > 1.5) { const t = sheetHit(ray.ray); if (t) return { target: "sheet", t }; }
   const hg = ray.intersectObject(globeMesh, false)[0];
   if (hg) return { target: "globe", point: hg.point };
-  if (S.cylOn && S.s < 1.02) { const hc = ray.intersectObject(cylSurface, false)[0]; if (hc) return { target: "cyl" }; }
+  if (cyl.visible) { const hc = ray.intersectObject(cylSurface, false)[0]; if (hc) return { target: "cyl" }; }
   return { target: "view" };
 }
-// where a ray meets the unrolled sheet (the plane x = 1 in the cylinder's frame), as cylinder lon/lat
-function sheetHit(r) {
-  const Ci = mT(S.C);
-  const o = mv(Ci, fromThree([r.origin.x, r.origin.y, r.origin.z])), d = mv(Ci, fromThree([r.direction.x, r.direction.y, r.direction.z]));
-  if (Math.abs(d[0]) < 1e-9) return null;
-  const k = (1 - o[0]) / d[0]; if (k <= 0) return null;
-  const th = o[1] + d[1] * k, h = o[2] + d[2] * k;
-  if (Math.abs(th) > Math.PI || Math.abs(h) > MAXH) return null;
-  const lat = deg(cylLat(h));
-  return Math.abs(lat) > 85 ? null : [deg(th), lat];
-}
-// a click at cylinder lon/lat t (on the globe or the sheet)
+// a click at cylinder lon/lat t
 function clickAt(t) {
   const c = lonlat(mv(mT(M()), vec(...t)));
   pickPoint(c, clickName(c));
@@ -648,7 +608,7 @@ cv.addEventListener("pointerdown", e => {
     pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), dist: cam.dist }; drag = null; return;
   }
   const hit = hitTest(e.clientX, e.clientY);
-  const target = e.button === 2 ? "view" : e.shiftKey && S.cylOn ? "both" : hit.target;
+  const target = e.button === 2 ? "view" : e.shiftKey && cyl.visible ? "both" : hit.target;
   drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, target, hit, button: e.button, moved: false };
   if (target !== "view") cv.style.cursor = "grabbing";
 });
@@ -671,7 +631,7 @@ cv.addEventListener("pointermove", e => {
   const e2 = camera.matrixWorld.elements;
   const right = fromThree([e2[0], e2[1], e2[2]]), up = fromThree([e2[4], e2[5], e2[6]]);
   const R = mmul(axisAngle(up, dx * 0.008), axisAngle(right, dy * 0.008));
-  if (drag.target === "globe" || drag.target === "sheet" || drag.target === "both") S.G = orthonormalize(mmul(R, S.G));
+  if (drag.target === "globe" || drag.target === "both") S.G = orthonormalize(mmul(R, S.G));
   if (drag.target === "cyl" || drag.target === "both") drag.hit.pane.C = orthonormalize(mmul(R, drag.hit.pane.C));
   dirty = true;
 });
@@ -679,7 +639,6 @@ cv.addEventListener("pointerup", e => {
   if (drag && !drag.moved && drag.button === 0 && !e.shiftKey) {
     withPane(drag.hit.pane, () => {
       if (drag.hit.target === "globe") { const p = drag.hit.point; clickAt(lonlat(mv(mT(S.C), fromThree([p.x, p.y, p.z])))); }
-      else if (drag.hit.target === "sheet") clickAt(drag.hit.t);
     });
   }
   if (drag && drag.target !== "view") cv.style.cursor = "grab";
@@ -693,25 +652,21 @@ cv.addEventListener("wheel", e => { e.preventDefault(); cam.dist = Math.max(4, M
 // controls
 for (const p of ["g", "c"]) for (let i = 0; i < 3; i++) $(p + i).addEventListener("input", () => {
   const v = [0, 1, 2].map(j => +$(p + j).value);
-  if (p === "g") S.G = d3R(...v); else { panes.b.C = d3R(...v); showCylinder(); }
+  if (p === "g") S.G = d3R(...v); else panes.b.C = d3R(...v);
   dirty = true;
 });
-for (const i of [0, 2, 3]) $("st" + i).onclick = () => setStep(i);
 $("pr-normal").onclick = () => turnCylinder(ident());
 $("pr-trans").onclick = () => turnCylinder(d3R(0, 0, -90));
 $("pr-obl").onclick = () => turnCylinder(d3R(0, 0, -45));
-$("freeze").onclick = () => setFrozen(true);
-$("unfreeze").onclick = () => setFrozen(false);
-$("mapOpacity").addEventListener("input", e => { S.mapOpacity = +e.target.value / 100; $("mapo").textContent = e.target.value + "%"; dirty = true; });
+$("cylOpacity").addEventListener("input", e => { S.cylOpacity = +e.target.value / 100; $("cylo").textContent = e.target.value + "%"; dirty = true; });
 $("opacity").addEventListener("input", e => { S.globeOpacity = +e.target.value / 100; $("opo").textContent = e.target.value + "%"; dirty = true; });
 $("clearRoutes").onclick = () => { S.routes = []; S.from = null; $("from").value = ""; $("to").value = ""; routesChanged(); };
-// Reset: this step's starting state (globe, cylinder, view, opacity); step, routes and the frozen map stay
-$("reset").onclick = async () => {
+// Reset: globe, cylinder, view and opacity back to the start; routes stay
+$("reset").onclick = () => {
   S.from = null; $("from").value = ""; $("to").value = "";
   S.globeOpacity = 0.55; $("opacity").value = 55; $("opo").textContent = "55%";
-  S.mapOpacity = 0.85; $("mapOpacity").value = 85; $("mapo").textContent = "85%";
-  if (S.step === 3) { await animateTo(ident(), ident(), 700, panes.b); faceSheet(); }
-  else { animateTo(ident(), ident(), 700, panes.b); cameraTo({ ...CAM0, dist: S.step === 0 ? CAM0.dist : CAMCYL }, [0, 1, 0], 700); }
+  S.cylOpacity = 0.85; $("cylOpacity").value = 85; $("cylo").textContent = "85%";
+  animateTo(ident(), ident(), 700, panes.b); cameraTo(CAM0, [0, 1, 0], 700);
 };
 window.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
@@ -733,7 +688,7 @@ function frame() {
     const r = panes.b.rect;
     renderer.setViewport(0, 0, r.w, r.h);
     renderer.render(scene, camera);
-    drawFrozen();
+    drawWall();
     updateReadout();
   }
   requestAnimationFrame(frame);
@@ -746,6 +701,6 @@ window.addEventListener("DOMContentLoaded", () => requestAnimationFrame(frame));
 // hooks for tests
 window.__lab = { S, M, globe: () => ({ opacity: globeMat.opacity, depthWrite: globeMat.depthWrite }),
   screenOf: p => { scene.updateMatrixWorld(); const v = new THREE.Vector3(...p).project(camera), r = cv.getBoundingClientRect(); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height]; },
-  idle: () => running === 0 && !dirty, setStep, animateTo, panes, alongRoute, frozen: () => S.frozen,
+  idle: () => running === 0 && !dirty, animateTo, panes, alongRoute, wall: () => wmProj,
   map: () => ({ visible: mapMesh.visible, opacity: mapMat.opacity }),
   counts: () => Object.assign(Object.fromEntries(Object.entries(L).map(([k, o]) => [k, o.geometry.drawRange.count])), { routes: routeGroup.children.length }) };

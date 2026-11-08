@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Mercator Lab</title>
-  <meta name="description" content="A globe inside a Mercator cylinder that unrolls into a wall map, with great-circle and rhumb-line routes between cities.">
+  <meta name="description" content="A globe inside a Mercator cylinder beside the wall map it makes, with great-circle and rhumb-line routes between cities.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://corey.sciu.to/mercator-lab/">
   <meta property="og:title" content="Mercator Lab">
-  <meta property="og:description" content="A globe inside a Mercator cylinder that unrolls into a wall map, with great-circle and rhumb-line routes between cities.">
+  <meta property="og:description" content="A globe inside a Mercator cylinder beside the wall map it makes, with great-circle and rhumb-line routes between cities.">
   <meta property="og:image" content="https://corey.sciu.to/mercator-lab/preview.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,8 +19,8 @@
 body { margin: 0; }
 [hidden] { display: none !important; }
 
-/* Layout: one dark drafting-room screen. 3D bench on the left (globe → cylinder → wall map), routes and controls on the right.
-   Color is meaning: amber = Earth's own grid, cyan = the cylinder's grid, coral = live projection (B), lavender = frozen copy (A). */
+/* Layout: one dark drafting-room screen. Globe in its cylinder (3D) and the wall map it makes side by side; routes and controls on the right.
+   Color is meaning: amber = Earth's own grid, cyan = the cylinder's grid, coral = the projected coastline. */
 :root {
   color-scheme: dark;
   --bg: #0c1317;
@@ -78,12 +78,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 0; }
 #bench { position: relative; min-width: 0; min-height: 0; }
-#bench { display: grid; grid-template-columns: 1fr; }
-#bench.frozen { grid-template-columns: 1fr 1fr; }
+#bench { display: grid; grid-template-columns: 1fr 1fr; }
 #live { position: relative; min-width: 0; min-height: 0; }
-#frozenBox { position: relative; min-width: 0; min-height: 0; border-left: 1px solid var(--line); }
-#frozenBox canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
-#frozenLabel { position: absolute; left: 14px; top: 12px; color: var(--a); pointer-events: none; }
+#wallBox { position: relative; min-width: 0; min-height: 0; border-left: 1px solid var(--line); }
+#wallBox canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+#wallLabel { position: absolute; left: 14px; top: 12px; pointer-events: none; }
 #routes .along { margin-top: 4px; font: 500 11.5px var(--f-body); color: var(--cyl); background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 2px 7px; cursor: pointer; }
 #routes .along:hover { border-color: var(--cyl); }
 #live canvas { display: block; width: 100%; height: 100%; touch-action: none; }
@@ -111,7 +110,6 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
 #routes .x { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 4px; align-self: start; }
 #routes .x:hover { color: var(--b); }
 .note { margin: 0; color: var(--muted); font-size: 12px; }
-#live.cylOff .cylOnly { display: none; }
 .seg .sw { display: inline-block; margin-right: 6px; vertical-align: middle; }
 
 #side { min-height: 0; overflow-y: auto; border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; }
@@ -120,7 +118,7 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
 .sec h2 { margin: 0; font: 600 10.5px var(--f-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; }
 .sec h2 .dot { width: 8px; height: 8px; border-radius: 50%; }
 .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.slider { display: grid; grid-template-columns: 44px 1fr 52px; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.slider { display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .slider input[type=range] { width: 100%; accent-color: var(--ink); }
 .slider output { font: 12px var(--f-data); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
 #globeSec input[type=range] { accent-color: var(--earth); }
@@ -137,9 +135,8 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
   body { overflow: auto; }
   #app { height: auto; min-height: 100%; }
   main { grid-template-columns: 1fr; }
-  #bench { height: 62vh; min-height: 360px; }
-  #bench.frozen { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; height: 92vh; }
-  #frozenBox { border-left: 0; border-top: 1px solid var(--line); }
+  #bench { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; height: 92vh; min-height: 560px; }
+  #wallBox { border-left: 0; border-top: 1px solid var(--line); }
   #side { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
     }
 @media (max-width: 520px) {
@@ -157,41 +154,28 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
 <div id="app">
   <header class="bar">
     <h1>Mercator Lab</h1>
-    <span class="seg" role="group" aria-label="Stage">
-      <button id="st0" aria-pressed="true">Globe</button>
-      <button id="st2" aria-pressed="false">Project</button>
-      <button id="st3" aria-pressed="false">Unroll</button>
-    </span>
-    <span class="grp">
-      <button class="btn" id="freeze" title="Keep the wall map as it is now, beside the live view">Freeze</button>
-      <button class="btn" id="unfreeze" disabled>Unfreeze</button>
-    </span>
     <span class="spacer"></span>
-    <button class="btn" id="reset" title="Back to this step's start; routes stay">Reset</button>
+    <button class="btn" id="reset" title="Globe, cylinder and view back to the start; routes stay">Reset</button>
     <a class="btn" id="help" href="help.html">Help</a>
   </header>
 
   <main>
-    <section id="bench" aria-label="Globe, cylinder and wall map">
+    <section id="bench" aria-label="Globe in its cylinder, and the wall map">
       <div id="live">
       <div class="overlay" id="overlay">
-        <div class="grp" style="flex-wrap:wrap;gap:6px 16px">
-        <label class="inl" for="opacity">Globe opacity <input type="range" id="opacity" min="0" max="100" step="1" value="55"><output id="opo">55%</output></label>
-        <label class="inl cylOnly" for="mapOpacity">Map opacity <input type="range" id="mapOpacity" min="0" max="100" step="1" value="85"><output id="mapo">85%</output></label>
-        </div>
         <div class="hint" id="dragHint"></div>
       </div>
       <div class="legend">
         <span><i class="sw earth"></i>Earth's grid</span>
-        <span class="cylOnly"><i class="sw cyl"></i>Cylinder</span>
-        <span class="cylOnly"><i class="sw seam"></i>Seam</span>
+        <span><i class="sw cyl"></i>Cylinder</span>
+        <span><i class="sw seam"></i>Seam</span>
         <span><i class="sw gcl"></i>Great circle</span>
         <span><i class="sw rhl"></i>Rhumb line</span>
       </div>
       </div>
-      <div id="frozenBox" hidden>
-        <span class="lbl" id="frozenLabel">Frozen</span>
-        <canvas id="frozen" aria-label="Frozen wall map"></canvas>
+      <div id="wallBox">
+        <span class="lbl" id="wallLabel">Wall map</span>
+        <canvas id="wall" aria-label="Wall map"></canvas>
       </div>
     </section>
 
@@ -217,6 +201,7 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
         <div class="slider"><label for="g0">Spin</label><input type="range" id="g0" min="-180" max="180" step="0.5" value="0"><output id="g0o">0°</output></div>
         <div class="slider"><label for="g1">Tilt</label><input type="range" id="g1" min="-90" max="90" step="0.5" value="0"><output id="g1o">0°</output></div>
         <div class="slider"><label for="g2">Roll</label><input type="range" id="g2" min="-180" max="180" step="0.5" value="0"><output id="g2o">0°</output></div>
+        <div class="slider"><label for="opacity">Opacity</label><input type="range" id="opacity" min="0" max="100" step="1" value="55"><output id="opo">55%</output></div>
       </div>
 
       <div class="sec" id="cylSec">
@@ -229,6 +214,7 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
         <div class="slider"><label for="c0">Spin</label><input type="range" id="c0" min="-180" max="180" step="0.5" value="0"><output id="c0o">0°</output></div>
         <div class="slider"><label for="c1">Tilt</label><input type="range" id="c1" min="-90" max="90" step="0.5" value="0"><output id="c1o">0°</output></div>
         <div class="slider"><label for="c2">Roll</label><input type="range" id="c2" min="-180" max="180" step="0.5" value="0"><output id="c2o">0°</output></div>
+        <div class="slider"><label for="cylOpacity">Opacity</label><input type="range" id="cylOpacity" min="0" max="100" step="1" value="85"><output id="cylo">85%</output></div>
         <p class="note" id="touch">Touches along the equator</p>
       </div>
 
