@@ -78,7 +78,7 @@ function touchLabel(M) {
     var r = Math.round(lon);
     return "Transverse · touches the " + (r === 0 ? "0°" : Math.abs(r) + "°" + (r > 0 ? "E" : "W")) + " meridian";
   }
-  return "Oblique " + Math.round(tilt) + "° · touches a tilted circle";
+  return "Oblique · touches a circle tilted " + Math.round(tilt) + "° from the equator";
 }
 // The cylinder that touches the globe along the great circle through a and b (lon/lat), with the route's
 // midpoint at the map's center and a → b running east. G is the globe's rotation. Its map draws the great

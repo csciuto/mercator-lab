@@ -29,7 +29,7 @@ test('says where the cylinder touches the globe', () => {
   assert.equal(S.touchLabel(S.ident()), 'Normal · touches the equator');
   assert.equal(S.touchLabel(M(S.d3R(40, 0, 0), S.ident())), 'Normal · touches the equator');      // spinning the Earth doesn't change it
   assert.match(S.touchLabel(M(S.ident(), S.d3R(0, 0, -90))), /^Transverse · touches the 0° meridian$/);
-  assert.equal(S.touchLabel(M(S.ident(), S.d3R(0, 0, -45))), 'Oblique 45° · touches a tilted circle');
+  assert.equal(S.touchLabel(M(S.ident(), S.d3R(0, 0, -45))), 'Oblique · touches a circle tilted 45° from the equator');
 });
 
 test('orthonormalize leaves a rotation a rotation', () => {

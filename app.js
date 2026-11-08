@@ -141,7 +141,7 @@ const cylSurface = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 2 * MAXH, 72,
   new THREE.MeshBasicMaterial({ color: new THREE.Color(COL.cyl), transparent: true, opacity: 0.045, side: THREE.DoubleSide, depthWrite: false, fog: false }));
 cyl.add(cylSurface);
 const cylStatics = [cylSurface];
-const cylBase = new Map();   // material → its opacity at full cylinder opacity
+const cylBase = new Map();   // material of the projected map → its opacity at full cylinder opacity
 (() => {
   const ring = []; for (let t = 0; t <= 360; t += 4) ring.push([Math.sin(rad(t)) * 1.004, 0, Math.cos(rad(t)) * 1.004]);
   const eq = tube(ring, COL.cyl, 0.013, true); cyl.add(eq); cylStatics.push(eq);
@@ -187,7 +187,8 @@ function placeMap(s) {
   mapGeo.attributes.position.needsUpdate = true;
 }
 
-// everything on the cylinder fades with the Cylinder opacity slider; lines stay solid down to the default
+// the map on the cylinder (fill, projected lines, routes) fades with the Cylinder opacity slider; lines stay solid
+// down to the default. The cylinder's own wireframe always stays.
 function fadeCylinder(k) {
   const lk = Math.min(1, k / 0.85);
   for (const m of cylBase.keys()) m.opacity = cylBase.get(m) * lk;
@@ -395,7 +396,7 @@ function clickName(c) { const p = nearestPlace(PLACES, c, 50); return p ? p[0] :
 let cylVisuals = false;
 function rebuild() {
   if (!cylVisuals) { // register what fades with the cylinder (once everything exists)
-    cylStatics.forEach(onCyl); Object.values(L).forEach(onCyl); onCyl(pts2); Object.values(routeMats[1]).forEach(m => cylBase.set(m, 1));
+    [L.coast, L.grat, L.eq, pts2].forEach(onCyl); Object.values(routeMats[1]).forEach(m => cylBase.set(m, 1));
     cylVisuals = true;
   }
   const Mr = M();
@@ -412,15 +413,14 @@ function rebuild() {
   globeMat.opacity = gop;
   const solid = gop > 0.97;
   if (globeMat.depthWrite !== solid) { globeMat.depthWrite = solid; globeMat.side = solid ? THREE.FrontSide : THREE.DoubleSide; globeMat.needsUpdate = true; }
-  cylBase.set(cylSurface.material, hoverTarget === "cyl" ? 0.12 : 0.045);
+  cylSurface.material.opacity = hoverTarget === "cyl" ? 0.12 : 0.045;
   fadeCylinder(k);
-  const on = k > 0.005;
-  cyl.visible = on;
+  const on = k > 0.005;   // the projected map is drawn
   mapMesh.visible = on; mapMat.opacity = k;
   if (on) { drawMap(); placeMap(s); mapMat.map = cur.tex; }
-  writeLines(L.wire, scratch, on ? placeOnCyl(WIRE.w, s, Cg, scratch) : 0);
-  writeLines(L.wireHi, scratch, on ? placeOnCyl(WIRE.hi, s, Cg, scratch) : 0);
-  writeLines(L.seam, scratch, on ? placeOnCyl(WIRE.seam, s, Cg, scratch) : 0);
+  writeLines(L.wire, scratch, placeOnCyl(WIRE.w, s, Cg, scratch));
+  writeLines(L.wireHi, scratch, placeOnCyl(WIRE.hi, s, Cg, scratch));
+  writeLines(L.seam, scratch, placeOnCyl(WIRE.seam, s, Cg, scratch));
 
   writeLines(L.coast, scratch, on ? placeLive(PB.coast, s, Gg, Cg, scratch) : 0);
   writeLines(L.grat, scratch, on ? placeLive(PB.grat, s, Gg, Cg, scratch) : 0);
@@ -592,7 +592,7 @@ function hitPane(px, py, pane) {
   paneCamera(); scene.updateMatrixWorld(); ray.setFromCamera(ndc, camera);
   const hg = ray.intersectObject(globeMesh, false)[0];
   if (hg) return { target: "globe", point: hg.point };
-  if (cyl.visible) { const hc = ray.intersectObject(cylSurface, false)[0]; if (hc) return { target: "cyl" }; }
+  const hc = ray.intersectObject(cylSurface, false)[0]; if (hc) return { target: "cyl" };
   return { target: "view" };
 }
 // a click at cylinder lon/lat t
@@ -608,7 +608,7 @@ cv.addEventListener("pointerdown", e => {
     pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), dist: cam.dist }; drag = null; return;
   }
   const hit = hitTest(e.clientX, e.clientY);
-  const target = e.button === 2 ? "view" : e.shiftKey && cyl.visible ? "both" : hit.target;
+  const target = e.button === 2 ? "view" : e.shiftKey ? "both" : hit.target;
   drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, target, hit, button: e.button, moved: false };
   if (target !== "view") cv.style.cursor = "grabbing";
 });
