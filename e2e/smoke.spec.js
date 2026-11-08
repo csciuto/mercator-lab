@@ -110,7 +110,7 @@ test('× removes one route; Clear routes removes them all', async ({ page }) => 
   await expect(page.locator(READY)).toHaveText('No routes yet');
 });
 
-test('Globe and Cylinder opacity are separate; at 0 only the wireframe is left', async ({ page }) => {
+test('Globe and Cylinder opacity are separate; at 0 the fill goes and the outlines stay', async ({ page }) => {
   await page.goto(APP + BOS_ROM);
   await idle(page);
   await page.locator('#cylOpacity').fill('30'); await idle(page);
@@ -121,8 +121,8 @@ test('Globe and Cylinder opacity are separate; at 0 only the wireframe is left',
   await page.locator('#cylOpacity').fill('0'); await idle(page);
   expect((await page.evaluate(() => window.__lab.map())).visible).toBe(false);
   const c = await counts(page);
-  expect(c.coast).toBe(0);
-  expect(c.wire).toBeGreaterThan(0);                    // the cylinder's wireframe stays
+  expect(c.coast).toBeGreaterThan(0);                   // country outlines stay on the cylinder
+  expect(c.wire).toBeGreaterThan(0);                    // and so does its wireframe
   await expect(page.locator('#wall')).toBeVisible();   // and so does the wall map
 });
 

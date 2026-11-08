@@ -141,7 +141,6 @@ const cylSurface = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 2 * MAXH, 72,
   new THREE.MeshBasicMaterial({ color: new THREE.Color(COL.cyl), transparent: true, opacity: 0.045, side: THREE.DoubleSide, depthWrite: false, fog: false }));
 cyl.add(cylSurface);
 const cylStatics = [cylSurface];
-const cylBase = new Map();   // material of the projected map → its opacity at full cylinder opacity
 (() => {
   const ring = []; for (let t = 0; t <= 360; t += 4) ring.push([Math.sin(rad(t)) * 1.004, 0, Math.cos(rad(t)) * 1.004]);
   const eq = tube(ring, COL.cyl, 0.013, true); cyl.add(eq); cylStatics.push(eq);
@@ -187,13 +186,6 @@ function placeMap(s) {
   mapGeo.attributes.position.needsUpdate = true;
 }
 
-// the map on the cylinder (fill, projected lines, routes) fades with the Cylinder opacity slider; lines stay solid
-// down to the default. The cylinder's own wireframe always stays.
-function fadeCylinder(k) {
-  const lk = Math.min(1, k / 0.85);
-  for (const m of cylBase.keys()) m.opacity = cylBase.get(m) * lk;
-}
-const onCyl = obj => { const m = obj.material; if (!cylBase.has(m)) cylBase.set(m, m.opacity); };
 
 // dynamic line layers ----
 function dynLines(color, opacity, max = 120000) {
@@ -393,12 +385,7 @@ function pickPoint(c, name) {
 function clickName(c) { const p = nearestPlace(PLACES, c, 50); return p ? p[0] : fmtLL(c); }
 
 // ---------------- draw ----------------
-let cylVisuals = false;
 function rebuild() {
-  if (!cylVisuals) { // register what fades with the cylinder (once everything exists)
-    [L.coast, L.grat, L.eq, pts2].forEach(onCyl); Object.values(routeMats[1]).forEach(m => cylBase.set(m, 1));
-    cylVisuals = true;
-  }
   const Mr = M();
   const key = JSON.stringify(Mr);
   if (key !== cur.PBkey) {
@@ -414,27 +401,27 @@ function rebuild() {
   const solid = gop > 0.97;
   if (globeMat.depthWrite !== solid) { globeMat.depthWrite = solid; globeMat.side = solid ? THREE.FrontSide : THREE.DoubleSide; globeMat.needsUpdate = true; }
   cylSurface.material.opacity = hoverTarget === "cyl" ? 0.12 : 0.045;
-  fadeCylinder(k);
-  const on = k > 0.005;   // the projected map is drawn
-  mapMesh.visible = on; mapMat.opacity = k;
-  if (on) { drawMap(); placeMap(s); mapMat.map = cur.tex; }
+  // the slider fades the filled map only; outlines, grid and routes on the cylinder stay
+  const fill = k > 0.005;
+  mapMesh.visible = fill; mapMat.opacity = k;
+  if (fill) { drawMap(); placeMap(s); mapMat.map = cur.tex; }
   writeLines(L.wire, scratch, placeOnCyl(WIRE.w, s, Cg, scratch));
   writeLines(L.wireHi, scratch, placeOnCyl(WIRE.hi, s, Cg, scratch));
   writeLines(L.seam, scratch, placeOnCyl(WIRE.seam, s, Cg, scratch));
 
-  writeLines(L.coast, scratch, on ? placeLive(PB.coast, s, Gg, Cg, scratch) : 0);
-  writeLines(L.grat, scratch, on ? placeLive(PB.grat, s, Gg, Cg, scratch) : 0);
-  writeLines(L.eq, scratch, on ? placeLive(PB.eq, s, Gg, Cg, scratch) : 0);
+  writeLines(L.coast, scratch, placeLive(PB.coast, s, Gg, Cg, scratch));
+  writeLines(L.grat, scratch, placeLive(PB.grat, s, Gg, Cg, scratch));
+  writeLines(L.eq, scratch, placeLive(PB.eq, s, Gg, Cg, scratch));
   routeGroup.children.forEach(m => m.geometry.dispose());
   routeGroup.clear();
-  drawRoutes(0); if (on) drawRoutes(1);
+  drawRoutes(0); drawRoutes(1);
 
 
   // endpoints (on the globe and the cylinder) and labels (on the globe)
   const ends = routesShown().flatMap(r => [r.a, r.b]).concat(S.from ? [S.from.c] : []);
   for (const [geo, at] of [[ptsGeo, 0], [pts2Geo, 1]]) {
     const pa = geo.attributes.position.array; let np = 0;
-    if (at === 0 || on) for (const c of ends) { const w = placePoint(vec(...c), at); if (w && np < 600) { pa.set(w, np * 3); np++; } }
+    for (const c of ends) { const w = placePoint(vec(...c), at); if (w && np < 600) { pa.set(w, np * 3); np++; } }
     geo.attributes.position.needsUpdate = true; geo.setDrawRange(0, np);
   }
   syncSprites();
