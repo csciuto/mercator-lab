@@ -2,6 +2,8 @@
 
 **Live:** [corey.sciu.to/mercator-lab](https://corey.sciu.to/mercator-lab/)
 
+How it's built: [ARCHITECTURE.md](ARCHITECTURE.md).
+
 Built with [Claude Code](https://claude.com/claude-code).
 
 A globe inside a Mercator cylinder with the map projected onto it, beside the wall map that cylinder makes. Turn
