@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 global.clampCoord = require('../geo.js').clampCoord;  // lines.js expects geo.js loaded first, as in the pages
-const { encodeLines, decodeLines, linesFromHash, linesHash, routesHash, routesFromHash } = require('../lines.js');
+const { encodeLines, decodeLines, linesFromHash, linesHash, routesHash, routesFromHash, viewHash, turnFromHash, circlesFromHash } = require('../lines.js');
 global.linesFromHash = linesFromHash;
 
 const BOS = [-71.06, 42.36], MOS = [37.62, 55.76];
@@ -43,4 +43,30 @@ test('routes round-trip; old #lines= links collapse their pairs into one route',
   assert.deepEqual(routesFromHash('#routes='), []);
   assert.equal(routesFromHash('#lines=gc:-71.06,42.36,37.62,55.76;rh:37.62,55.76,-71.06,42.36').length, 1);
   assert.equal(routesFromHash('#routes=1,2,3;4,5,6,7').length, 1);
+});
+
+test('the whole view goes in the address: routes, both turns and the circles; the starting view is a clean address', () => {
+  const routes = [{ a: BOS, b: MOS }];
+  assert.equal(viewHash([], [0, 0, 0], [0, 0, 0], false), '');
+  assert.equal(viewHash([], [0.04, -0.04, 0], [0, 0, 0], false), '');                 // sliders show one decimal: this is at rest
+  assert.equal(viewHash(routes, [0, 0, 0], [0, 0, 0], false), routesHash(routes));    // routes alone: the address as it always was
+  const h = viewHash(routes, [12.34, -5, 0], [0, 0, -90], true);
+  assert.equal(h, '#routes=-71.06,42.36,37.62,55.76&g=12.3,-5,0&c=0,0,-90&circles');
+  assert.deepEqual(routesFromHash(h).map((r) => r.a), [BOS]);
+  assert.deepEqual(turnFromHash(h, 'g'), [12.3, -5, 0]);
+  assert.deepEqual(turnFromHash(h, 'c'), [0, 0, -90]);
+  assert.equal(circlesFromHash(h), true);
+  assert.equal(viewHash([], [0, 0, 0], [0, 0, -45], false), '#c=0,0,-45');
+});
+
+test('turns in the address are checked: absent, malformed or out of range', () => {
+  assert.equal(turnFromHash('', 'g'), null);
+  assert.equal(turnFromHash('#routes=1,2,3,4', 'g'), null);
+  assert.equal(turnFromHash('#g=1,2', 'g'), null);
+  assert.equal(turnFromHash('#g=a,b,c', 'g'), null);
+  assert.deepEqual(turnFromHash('#g=999,-999,181', 'g'), [180, -90, 180]);
+  assert.equal(turnFromHash('#cg=1,2,3', 'g'), null);                                // not a g= part
+  assert.equal(circlesFromHash('#routes=1,2,3,4'), false);
+  assert.equal(circlesFromHash('#circles'), true);
+  assert.equal(circlesFromHash('#circlesx'), false);
 });

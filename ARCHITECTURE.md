@@ -8,11 +8,11 @@ fetched after the page loads. About 1,100 lines of app code plus ~300 KB of inli
 
 | Piece | What it uses |
 |---|---|
-| 3D globe and cylinder | **three.js** r128 (WebGL): meshes, line segments, `CanvasTexture`, raycasting for clicks |
+| 3D globe and cylinder | **three.js** 0.185.1 (WebGL), loaded as an ES module and handed to the classic scripts as `THREE`: meshes, line segments, `CanvasTexture`, raycasting for clicks |
 | Wall map and textures | **d3** 7.9.0: `geoMercator` with a rotation, `geoPath` drawn to canvas |
-| Country shapes | **topojson-client** 3.0.2; Natural Earth 110m (world-atlas), inlined in `world.js` |
+| Country shapes | **topojson-client** 3.0.2; Natural Earth 110m (world-atlas), inlined in `world.js`; 50m in `world-50m.json`, fetched on the first close zoom |
 | Cities | GeoNames cities of 100,000+ (CC BY 4.0), inlined in `places.js` |
-| State | Routes in the URL hash (`#routes=lon,lat,lon,lat;…`) |
+| State | The URL hash: routes (`#routes=lon,lat,lon,lat;…`), the globe's and cylinder's turns (`&g=…&c=…`), `&circles` |
 | Libraries | three.js, d3 and topojson from cdnjs, pinned |
 
 Dev only: Node's built-in test runner (unit tests), Playwright + axe-core (browser and accessibility tests).
@@ -76,8 +76,27 @@ flowchart LR
   [csciuto/app-template](https://github.com/csciuto/app-template)); only if they pass is the site stamped with
   a version and published to GitHub Pages.
 
+## Details worth knowing
+
+- **Draw order is explicit.** Nearly every layer is see-through and centered on the same point, so what is drawn
+  over what is decided by order alone. Each object gets a `renderOrder` in the order it was added (set once at
+  the end of `app.js`). Without that, three.js breaks the tie itself, and newer versions do it differently from
+  r128: after the update the cylinder's ring drew over the globe and the front coastlines vanished, until the
+  order was fixed.
+- **Colors are not converted.** `ColorManagement.enabled = false` and a linear output color space keep the CSS
+  colors and canvas textures exactly as written, as in r128.
+- **Updating three.js.** Take screenshots of a few views before and after (start, turned with routes and
+  circles, transverse, solid globe) and compare them pixel by pixel; the 0.185 update ended within 0.2% of pixels
+  of r128, two views identical.
+- **Distortion circles** are `d3.geoCircle`s of 4° radius; on the globe and cylinder they are line segments
+  projected like the coastlines, on the wall map they are filled paths.
+- **Detail levels.** `DETAIL` in `app.js` holds the coarse and fine shapes; `checkDetail()` runs each drawn frame,
+  fetches the fine set the first time the camera comes within 9 units, and swaps coastlines, globe texture and
+  cylinder map; beyond 10.5 it swaps back.
+
 ## Known limits
 
 - Mercator only; latitude is cut at ±85.05°, as on web maps.
-- Country shapes are Natural Earth's 110m (coarse at close zoom).
-- three.js r128 is old but stable here; upgrading means moving to its ES-module builds.
+- The finer shapes (50m) are used only while zoomed in on the 3D view: they cost about twelve times as much per
+  redraw. The wall map always uses the coarse set.
+- three.js is pinned; a newer version needs the picture comparison below before it ships.

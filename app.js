@@ -27,12 +27,17 @@ const SRC = {
   grat: toVecs([-60, -30, 30, 60].map(parallel).concat([-150, -120, -90, -60, -30, 30, 60, 90, 120, 150, 180].map(l => meridian(l)))),
   eq: toVecs([parallel(0), meridian(0)]),
 };
+// Distortion circles (Tissot's indicatrix): the same small circle, 4° across its radius, every 30° of longitude
+// on five parallels. On the globe they are all alike; the map shows what Mercator does to each.
+const TISSOT = { type: "MultiPolygon", coordinates: [-60, -30, 0, 30, 60].flatMap(lat => d3.range(-180, 180, 30).map(lon => d3.geoCircle().center([lon, lat]).radius(4).precision(4)().coordinates)) };
+SRC.tissot = toVecs(TISSOT.coordinates.map(p => p[0]));
 // ---------------- state ----------------
 const S = {
   G: ident(),               // globe rotation, geo frame (each view's cylinder rotation is in panes)
   s: 1,                     // the projected map sits on the cylinder
   globeOpacity: 0.55, cylOpacity: 0.85,
   routes: [], from: null,   // from: {c, name} waiting for a To
+  circles: false,           // distortion circles shown
 };
 let dirty = true, routesVer = 0;
 // The live view: its cylinder, projection cache and map picture.
@@ -49,7 +54,11 @@ const M = () => mmul(mT(S.C), S.G); // the globe in the cylinder's frame: all th
 
 // ---------------- three.js scene ----------------
 const bench = $("live");   // the 3D view (the wall map sits beside it)
+// Colors are used exactly as written (in the page's CSS and the map's canvases), with no conversion on the way in
+// or out. That was the only behavior when this was written against three.js r128; newer versions convert by default.
+THREE.ColorManagement.enabled = false;
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
 renderer.setClearColor(new THREE.Color(COL.bg), 1);
 bench.prepend(renderer.domElement);
@@ -96,13 +105,18 @@ function label(text, color, scale = 0.5) {
 
 // globe ----
 const globe = new THREE.Group(); globe.matrixAutoUpdate = false; scene.add(globe);
+// The land drawn on the globe. Painted once from the coarse shapes, and again, larger, if the finer set loads.
+function paintGlobe(canvas, land, borders, w) {
+  canvas.width = w; canvas.height = w / 2;
+  const g = canvas.getContext("2d");
+  g.fillStyle = "#2a5463"; g.fillRect(0, 0, w, w / 2);
+  const path = d3.geoPath(d3.geoEquirectangular().scale(w / 2 / Math.PI).translate([w / 2, w / 4]), g);
+  g.beginPath(); path(land); g.fillStyle = "#d9cfb4"; g.fill();
+  g.beginPath(); path(borders); g.strokeStyle = "rgba(40,40,30,0.5)"; g.lineWidth = 1.2 * w / 2048; g.stroke();
+}
 const tex = (() => {
-  const c = document.createElement("canvas"); c.width = 2048; c.height = 1024;
-  const g = c.getContext("2d");
-  g.fillStyle = "#2a5463"; g.fillRect(0, 0, 2048, 1024);
-  const path = d3.geoPath(d3.geoEquirectangular().scale(1024 / Math.PI).translate([1024, 512]), g);
-  g.beginPath(); path(LANDGEO); g.fillStyle = "#d9cfb4"; g.fill();
-  g.beginPath(); path(topojson.mesh(WORLD, WORLD.objects.countries, (a, b) => a !== b)); g.strokeStyle = "rgba(40,40,30,0.5)"; g.lineWidth = 1.2; g.stroke();
+  const c = document.createElement("canvas");
+  paintGlobe(c, LANDGEO, topojson.mesh(WORLD, WORLD.objects.countries, (a, b) => a !== b), 2048);
   const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
 })();
 const globeMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false });
@@ -155,6 +169,43 @@ const cylStatics = [cylSurface];
 const BORDERS = topojson.mesh(WORLD, WORLD.objects.countries, (a, b) => a !== b);
 const mapMat = new THREE.MeshBasicMaterial({ map: panes.b.tex, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, fog: false });
 const MAPN = [96, 32]; // grid of the sheet in θ and h
+
+// ---------------- detail ----------------
+// Shapes come in two sizes. The coarse set (Natural Earth 110m, inlined in world.js) is what the page opens
+// with and what the wall map always uses. Zoomed in on the 3D view its corners show, so the medium set (50m,
+// world-50m.json, about 240 KB over the wire) is fetched the first time you zoom in and used while you stay
+// close: the coastlines, the land on the globe and the map on the cylinder. It has twelve times the points
+// and costs that much more per redraw, so zooming back out returns to the coarse set.
+const DETAIL = {
+  now: "lo", loading: false, failed: false,
+  lo: { land: LANDGEO, borders: BORDERS, coast: SRC.coast },
+  hi: null,
+  NEAR: 9, FAR: 10.5,          // camera distance: finer inside NEAR, coarse again beyond FAR
+};
+function useDetail(which) {
+  if (which === DETAIL.now || !DETAIL[which]) return;
+  DETAIL.now = which;
+  const d = DETAIL[which];
+  SRC.coast = d.coast;
+  tex.dispose(); paintGlobe(tex.image, d.land, d.borders, which === "hi" ? 4096 : 2048); tex.needsUpdate = true;
+  for (const p of Object.values(panes)) { p.PBkey = ""; p.mapKey = ""; }
+  dirty = true;
+}
+function checkDetail() {
+  if (cam.dist > DETAIL.FAR) return useDetail("lo");
+  if (cam.dist >= DETAIL.NEAR) return;
+  if (DETAIL.hi) return useDetail("hi");
+  if (DETAIL.loading || DETAIL.failed) return;
+  DETAIL.loading = true;
+  fetch("world-50m.json").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(w => {
+    DETAIL.hi = {
+      land: topojson.feature(w, w.objects.countries),
+      borders: topojson.mesh(w, w.objects.countries, (a, b) => a !== b),
+      coast: toVecs(topojson.mesh(w, w.objects.countries, (a, b) => a === b).coordinates),
+    };
+    DETAIL.loading = false; checkDetail();
+  }).catch(() => { DETAIL.loading = false; DETAIL.failed = true; });     // offline or blocked: the coarse set stays
+}
 const mapGeo = (() => {
   const g = new THREE.BufferGeometry(), uv = [], idx = [], [NT, NH] = MAPN;
   for (let j = 0; j <= NH; j++) for (let i = 0; i <= NT; i++) uv.push(i / NT, j / NH);
@@ -176,8 +227,8 @@ function drawMap(force) {
   const proj = R => d3.geoMercator().rotate(euler(R)).scale(W / (2 * Math.PI)).translate([W / 2, H / 2]).precision(0.5).clipExtent([[0, 0], [W, H]]);
   g.fillStyle = "#1f4552"; g.fillRect(0, 0, W, H);
   const path = d3.geoPath(proj(base), g);
-  g.beginPath(); path(LANDGEO); g.fillStyle = "#d9cfb4"; g.fill();
-  g.beginPath(); path(BORDERS); g.strokeStyle = "rgba(40,40,30,0.45)"; g.lineWidth = 0.8; g.stroke();
+  g.beginPath(); path(DETAIL[DETAIL.now].land); g.fillStyle = "#d9cfb4"; g.fill();
+  g.beginPath(); path(DETAIL[DETAIL.now].borders); g.strokeStyle = "rgba(40,40,30,0.45)"; g.lineWidth = 0.8; g.stroke();
   p.tex.needsUpdate = true;
 }
 function placeMap(s) {
@@ -197,8 +248,16 @@ function dynLines(color, opacity, max = 120000) {
 }
 const L = {
   wire: dynLines(COL.cyl, 0.26, 20000), wireHi: dynLines(COL.cyl, 0.95, 4000), seam: dynLines(COL.seam, 0.9, 2000),
-  coast: dynLines(COL.b, 0.9), grat: dynLines(COL.earth, 0.3, 30000), eq: dynLines(COL.earth, 1, 4000), 
+  coast: dynLines(COL.b, 0.9), grat: dynLines(COL.earth, 0.3, 30000), eq: dynLines(COL.earth, 1, 4000),
+  tissot: dynLines(COL.a, 1, 12000),
 };
+// the circles on the globe itself ride with it
+const tissotGlobe = (() => {
+  const g = new THREE.BufferGeometry(), arr = [];
+  for (const line of SRC.tissot) for (let i = 1; i < line.length; i++) arr.push(...toThree(line[i - 1]).map(x => x * 1.005), ...toThree(line[i]).map(x => x * 1.005));
+  g.setAttribute("position", new THREE.Float32BufferAttribute(arr, 3));
+  const l = new THREE.LineSegments(g, lineMat(COL.a, 1)); l.visible = false; globe.add(l); return l;
+})();
 // routes are drawn as tubes so they stay visible on the busy cylinder; rebuilt whenever the scene changes
 const routeGroup = new THREE.Group(); scene.add(routeGroup);
 const routeMat = c => new THREE.MeshBasicMaterial({ color: new THREE.Color(c), depthWrite: false, transparent: true });
@@ -354,9 +413,15 @@ function syncSprites() {
   if (S.from) add(S.from.name, COL.ink, vec(...S.from.c), 0.3, 0.14);
   spritesVer = key;
 }
+// The address follows the view: routes, the globe's and cylinder's turns, and the circles (lines.js viewHash)
+function saveView() {
+  const hash = viewHash(S.routes, euler(S.G), euler(panes.b.C), S.circles);
+  if (hash !== location.hash) history.replaceState(null, "", hash || location.pathname + location.search);
+}
+let saveTimer = 0;
 function routesChanged() {
   routesVer++;
-  history.replaceState(null, "", S.routes.length ? routesHash(S.routes) : location.pathname);
+  saveView();
   renderRoutes(); dirty = true;
 }
 function renderRoutes() {
@@ -389,7 +454,7 @@ function rebuild() {
   const Mr = M();
   const key = JSON.stringify(Mr);
   if (key !== cur.PBkey) {
-    cur.PB = { coast: projectLines(SRC.coast, Mr), grat: projectLines(SRC.grat, Mr), eq: projectLines(SRC.eq, Mr) };
+    cur.PB = { coast: projectLines(SRC.coast, Mr), grat: projectLines(SRC.grat, Mr), eq: projectLines(SRC.eq, Mr), tissot: projectLines(SRC.tissot, Mr) };
     cur.PBkey = key;
   }
   const PB = cur.PB;
@@ -412,6 +477,8 @@ function rebuild() {
   writeLines(L.coast, scratch, placeLive(PB.coast, s, Gg, Cg, scratch));
   writeLines(L.grat, scratch, placeLive(PB.grat, s, Gg, Cg, scratch));
   writeLines(L.eq, scratch, placeLive(PB.eq, s, Gg, Cg, scratch));
+  writeLines(L.tissot, scratch, S.circles ? placeLive(PB.tissot, s, Gg, Cg, scratch) : 0);
+  tissotGlobe.visible = S.circles;
   routeGroup.children.forEach(m => m.geometry.dispose());
   routeGroup.clear();
   drawRoutes(0); drawRoutes(1);
@@ -504,7 +571,7 @@ const wm = $("wall");
 let wmKey = "", wmProj = null;
 function drawWall() {
   const r = wm.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
-  const key = [JSON.stringify(M()), routesVer, S.from ? S.from.c : "", r.width, r.height].join("|");
+  const key = [JSON.stringify(M()), routesVer, S.from ? S.from.c : "", r.width, r.height, S.circles].join("|");
   if (key === wmKey || r.width < 10) return;
   wmKey = key;
   wm.width = Math.round(r.width * dpr); wm.height = Math.round(r.height * dpr);
@@ -520,6 +587,7 @@ function drawWall() {
   g.beginPath(); path(BORDERS); g.strokeStyle = "rgba(40,40,30,0.45)"; g.lineWidth = 0.6; g.stroke();
   g.beginPath(); path(d3.geoGraticule().step([15, 15])()); g.strokeStyle = COL.earth; g.globalAlpha = 0.25; g.lineWidth = 0.6; g.stroke(); g.globalAlpha = 1;
   g.beginPath(); path({ type: "LineString", coordinates: parallel(0) }); path({ type: "LineString", coordinates: meridian(0) }); g.strokeStyle = COL.earth; g.lineWidth = 1.2; g.stroke();
+  if (S.circles) { g.beginPath(); path(TISSOT); g.fillStyle = COL.a; g.globalAlpha = 0.28; g.fill(); g.globalAlpha = 1; g.strokeStyle = COL.a; g.lineWidth = 1.2; g.stroke(); }
   // the cylinder's own center lines: where it touches the globe, and the map's center meridian
   g.strokeStyle = COL.cyl; g.lineWidth = 1; g.globalAlpha = 0.8; g.beginPath();
   g.moveTo(box[0][0], cy); g.lineTo(box[1][0], cy); g.moveTo(cx, box[0][1]); g.lineTo(cx, box[1][1]); g.stroke(); g.globalAlpha = 1;
@@ -647,6 +715,7 @@ $("pr-trans").onclick = () => turnCylinder(d3R(0, 0, -90));
 $("pr-obl").onclick = () => turnCylinder(d3R(0, 0, -45));
 $("cylOpacity").addEventListener("input", e => { S.cylOpacity = +e.target.value / 100; $("cylo").textContent = e.target.value + "%"; dirty = true; });
 $("opacity").addEventListener("input", e => { S.globeOpacity = +e.target.value / 100; $("opo").textContent = e.target.value + "%"; dirty = true; });
+$("circles").addEventListener("change", e => { S.circles = e.target.checked; dirty = true; });
 $("clearRoutes").onclick = () => { S.routes = []; S.from = null; $("from").value = ""; $("to").value = ""; routesChanged(); };
 // Reset: globe, cylinder, view and opacity back to the start; routes stay
 $("reset").onclick = () => {
@@ -671,23 +740,36 @@ function frame() {
   // draw only when something changed (the canvas keeps its last picture)
   if (dirty) {
     dirty = false;
+    checkDetail();
     cur = panes.b; paneCamera(); rebuild();
     const r = panes.b.rect;
     renderer.setViewport(0, 0, r.w, r.h);
     renderer.render(scene, camera);
     drawWall();
     updateReadout();
+    clearTimeout(saveTimer); saveTimer = setTimeout(saveView, 300);   // once a turn or a drag has settled
   }
   requestAnimationFrame(frame);
 }
 (routesFromHash(location.hash) || []).forEach(r => S.routes.push({ a: r.a, b: r.b, an: nameOf(r.a), bn: nameOf(r.b) }));
+{ // the rest of a shared view: how the globe and cylinder were turned, and the circles
+  const g = turnFromHash(location.hash, "g"), c = turnFromHash(location.hash, "c");
+  if (g) S.G = d3R(...g);
+  if (c) panes.b.C = d3R(...c);
+  S.circles = circlesFromHash(location.hash); $("circles").checked = S.circles;
+}
 routesChanged();
+// Draw order. Nearly everything here is see-through and centered on the same point, so which layer is drawn over
+// which is decided by order alone. That order is the order the layers were added above (map sheet first, then the
+// globe, the cylinder, the line layers), with routes, points and labels on top by their own numbers. It is fixed
+// here so it doesn't depend on how a three.js version breaks ties between objects at the same distance.
+{ let n = 0; scene.traverse(o => { if (o.renderOrder === 0 && (o.isMesh || o.isLine || o.isPoints)) o.renderOrder = ++n / 1000; }); }
 placeCamera(); resize();
 window.addEventListener("DOMContentLoaded", () => requestAnimationFrame(frame)); // search.js loads after this file
 
 // hooks for tests
 window.__lab = { S, M, globe: () => ({ opacity: globeMat.opacity, depthWrite: globeMat.depthWrite }),
   screenOf: p => { scene.updateMatrixWorld(); const v = new THREE.Vector3(...p).project(camera), r = cv.getBoundingClientRect(); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height]; },
-  idle: () => running === 0 && !dirty, animateTo, panes, alongRoute, wall: () => wmProj,
+  idle: () => running === 0 && !dirty, detail: () => DETAIL.now, animateTo, panes, alongRoute, wall: () => wmProj,
   map: () => ({ visible: mapMesh.visible, opacity: mapMat.opacity }),
   counts: () => Object.assign(Object.fromEntries(Object.entries(L).map(([k, o]) => [k, o.geometry.drawRange.count])), { routes: routeGroup.children.length }) };

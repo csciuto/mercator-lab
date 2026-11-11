@@ -120,6 +120,9 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
 .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .slider { display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .slider input[type=range] { width: 100%; accent-color: var(--ink); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.check input { accent-color: var(--a); margin: 0; }
+.sw.circ { width: 12px; height: 12px; border: 2px solid var(--a); border-radius: 50%; background: color-mix(in srgb, var(--a) 28%, transparent); }
 .slider output { font: 12px var(--f-data); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
 #globeSec input[type=range] { accent-color: var(--earth); }
 #cylSec input[type=range] { accent-color: var(--cyl); }
@@ -202,6 +205,7 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
         <div class="slider"><label for="g1">Tilt</label><input type="range" id="g1" min="-90" max="90" step="0.5" value="0"><output id="g1o">0°</output></div>
         <div class="slider"><label for="g2">Roll</label><input type="range" id="g2" min="-180" max="180" step="0.5" value="0"><output id="g2o">0°</output></div>
         <div class="slider"><label for="opacity">Opacity</label><input type="range" id="opacity" min="0" max="100" step="1" value="55"><output id="opo">55%</output></div>
+        <label class="check"><input type="checkbox" id="circles"> Distortion circles <span class="sw circ" aria-hidden="true"></span></label>
       </div>
 
       <div class="sec" id="cylSec">
@@ -225,7 +229,6 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
   </main>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
 <script src="geo.js"></script>
@@ -234,7 +237,13 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
 <script src="cities.js"></script>
 <script src="places.js"></script>
 <script src="lines.js"></script>
-<script src="app.js"></script>
-<script src="search.js"></script>
+<!-- three.js ships as an ES module only. This loads it and hands it to app.js as THREE; deferred scripts run in
+     order after it, so app.js and search.js see it exactly as they saw the old script-tag build. -->
+<script type="module">
+  import * as THREE from "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.185.1/three.module.min.js";
+  window.THREE = THREE;
+</script>
+<script defer src="app.js"></script>
+<script defer src="search.js"></script>
 </body>
 </html>

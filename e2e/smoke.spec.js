@@ -189,3 +189,69 @@ test('Help, contact and a link back to the projects page', async ({ page }) => {
     await expect(page.locator('a[href="https://corey.sciu.to/projects/"]').first()).toBeAttached();
   }
 });
+
+test('the address keeps the globe, the cylinder and the circles, and a link restores them @desktop', async ({ page, context }) => {
+  await page.goto(APP);
+  await expect(page.locator(READY).first()).toBeVisible();
+  expect(new URL(page.url()).hash).toBe('');
+  await page.locator('#g0').fill('40');                       // spin the globe
+  await page.locator('#pr-trans').click();                    // transverse cylinder
+  await page.getByLabel('Distortion circles').check();
+  await expect.poll(() => new URL(page.url()).hash, { timeout: 8000 }).toBe('#g=40,0,0&c=0,0,-90&circles');
+
+  const other = await context.newPage();
+  await other.goto(page.url());
+  await expect(other.locator(READY).first()).toBeVisible();
+  await expect(other.locator('#g0o')).toHaveText('40.0°');
+  await expect(other.locator('#c2o')).toHaveText('-90.0°');
+  await expect(other.getByLabel('Distortion circles')).toBeChecked();
+  // Reset puts the globe and cylinder back; the address follows
+  await other.locator('#reset').click();
+  await expect.poll(() => new URL(other.url()).hash, { timeout: 8000 }).toBe('#circles');
+  await other.getByLabel('Distortion circles').uncheck();
+  await expect.poll(() => new URL(other.url()).hash, { timeout: 8000 }).toBe('');
+});
+
+test('distortion circles: alike on the globe, stretched toward the poles on the map @desktop', async ({ page }) => {
+  await page.goto(APP);
+  await expect(page.locator(READY).first()).toBeVisible();
+  await page.getByLabel('Distortion circles').check();
+  await idle(page);
+  const sizes = await page.evaluate(() => {
+    const proj = d3.geoMercator().scale(100).translate([0, 0]);
+    const height = lat => { const ring = TISSOT.coordinates.find(p => Math.abs(d3.geoCentroid({ type: 'Polygon', coordinates: p })[1] - lat) < 1)[0].map(c => proj(c)[1]); return Math.max(...ring) - Math.min(...ring); };
+    const area = lat => d3.geoArea({ type: 'Polygon', coordinates: TISSOT.coordinates.find(p => Math.abs(d3.geoCentroid({ type: 'Polygon', coordinates: p })[1] - lat) < 1) });
+    return { h0: height(0), h60: height(60), a0: area(0), a60: area(60), n: TISSOT.coordinates.length, shown: L.tissot.geometry.drawRange.count > 0 && tissotGlobe.visible };
+  });
+  expect(sizes.n).toBe(60);
+  expect(sizes.a60 / sizes.a0).toBeCloseTo(1, 2);             // the same circle on the globe
+  expect(sizes.h60 / sizes.h0).toBeCloseTo(2, 0);             // twice as tall on the map at 60 degrees: 1 / cos(60)
+  expect(sizes.shown).toBe(true);
+  await page.getByLabel('Distortion circles').uncheck();
+  await idle(page);
+  expect(await page.evaluate(() => L.tissot.geometry.drawRange.count === 0 && !tissotGlobe.visible)).toBe(true);
+});
+
+test('zooming in brings finer coastlines, zooming out goes back to the coarse set @desktop', async ({ page }) => {
+  let fetched = 0;
+  page.on('request', (r) => { if (r.url().endsWith('world-50m.json')) fetched++; });
+  await page.goto(APP);
+  await expect(page.locator(READY).first()).toBeVisible();
+  await idle(page);
+  expect(await page.evaluate(() => window.__lab.detail())).toBe('lo');
+  expect(fetched).toBe(0);                                    // not fetched until it is needed
+  const coarse = (await counts(page)).coast;
+  const box = await page.locator('#live canvas').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  for (let i = 0; i < 8; i++) await page.mouse.wheel(0, -200);        // zoom in
+  await expect.poll(() => page.evaluate(() => window.__lab.detail())).toBe('hi');
+  await idle(page);
+  expect((await counts(page)).coast).toBeGreaterThan(coarse * 5);
+  for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 200);        // and out again
+  await expect.poll(() => page.evaluate(() => window.__lab.detail())).toBe('lo');
+  await idle(page);
+  expect((await counts(page)).coast).toBe(coarse);
+  for (let i = 0; i < 8; i++) await page.mouse.wheel(0, -200);
+  await expect.poll(() => page.evaluate(() => window.__lab.detail())).toBe('hi');
+  expect(fetched).toBe(1);                                    // kept after the first time
+});

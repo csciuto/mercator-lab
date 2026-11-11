@@ -46,4 +46,28 @@ function routesFromHash(hash) {
   return list.filter(function (r) { var k = key(r); if (seen[k]) return false; seen[k] = 1; return true; });
 }
 
-if (typeof module !== "undefined") module.exports = { encodeLines, decodeLines, linesFromHash, linesHash, encodeRoutes, routesHash, routesFromHash };
+// The whole view in the address, so a link opens the map as it was left: the routes, how far the globe and the
+// cylinder are turned (spin, tilt, roll in degrees, as on the sliders), and whether the distortion circles are on.
+// Whatever is at rest is left out, so the starting view has a clean address.
+function turnText(e) { return e.map(function (v) { return +(+v).toFixed(1); }).join(","); }
+function isTurned(e) { return e.some(function (v) { return Math.abs(v) >= 0.05; }); }
+function viewHash(routes, globe, cylinder, circles) {
+  var parts = [];
+  if (routes && routes.length) parts.push("routes=" + encodeRoutes(routes));
+  if (globe && isTurned(globe)) parts.push("g=" + turnText(globe));
+  if (cylinder && isTurned(cylinder)) parts.push("c=" + turnText(cylinder));
+  if (circles) parts.push("circles");
+  return parts.length ? "#" + parts.join("&") : "";
+}
+// A turn from the address: [spin, tilt, roll], limited to the sliders' ranges; null if absent or malformed.
+function turnFromHash(hash, key) {
+  var m = new RegExp("(?:^#|&)" + key + "=([^&]*)").exec(hash || "");
+  if (!m) return null;
+  var v = m[1].split(",").map(Number);
+  if (v.length !== 3 || v.some(function (x) { return !isFinite(x); })) return null;
+  var lim = function (x, max) { return Math.max(-max, Math.min(max, x)); };
+  return [lim(v[0], 180), lim(v[1], 90), lim(v[2], 180)];
+}
+function circlesFromHash(hash) { return /(?:^#|&)circles(?:&|$)/.test(hash || ""); }
+
+if (typeof module !== "undefined") module.exports = { encodeLines, decodeLines, linesFromHash, linesHash, encodeRoutes, routesHash, routesFromHash, viewHash, turnFromHash, circlesFromHash };
