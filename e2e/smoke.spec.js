@@ -238,7 +238,7 @@ test('the address keeps the globe, the cylinder and the circles, and a link rest
   expect(new URL(page.url()).hash).toBe('');
   await tab(page, 'Globe');
   await page.locator('#g0').fill('40');                       // spin the globe
-  await page.getByLabel('Distortion circles').check();
+  await page.getByLabel("Tissot's indicatrix").check();
   await tab(page, 'Cylinder');
   await page.locator('#pr-trans').click();                    // transverse cylinder
   await expect.poll(() => new URL(page.url()).hash, { timeout: 8000 }).toBe('#g=40,0,0&c=0,0,-90&circles');
@@ -248,14 +248,14 @@ test('the address keeps the globe, the cylinder and the circles, and a link rest
   await expect(other.locator(READY).first()).toBeVisible();
   await tab(other, 'Globe');
   await expect(other.locator('#g0o')).toHaveText('40.0°');
-  await expect(other.getByLabel('Distortion circles')).toBeChecked();
+  await expect(other.getByLabel("Tissot's indicatrix")).toBeChecked();
   await tab(other, 'Cylinder');
   await expect(other.locator('#c2o')).toHaveText('-90.0°');
   // Reset puts the globe and cylinder back; the address follows
   await other.locator('#reset').click();
   await expect.poll(() => new URL(other.url()).hash, { timeout: 8000 }).toBe('#circles');
   await tab(other, 'Globe');
-  await other.getByLabel('Distortion circles').uncheck();
+  await other.getByLabel("Tissot's indicatrix").uncheck();
   await expect.poll(() => new URL(other.url()).hash, { timeout: 8000 }).toBe('');
 });
 
@@ -263,7 +263,7 @@ test('distortion circles: alike on the globe, stretched toward the poles on the 
   await page.goto(APP);
   await expect(page.locator(READY).first()).toBeVisible();
   await tab(page, 'Globe');
-  await page.getByLabel('Distortion circles').check();
+  await page.getByLabel("Tissot's indicatrix").check();
   await idle(page);
   const sizes = await page.evaluate(() => {
     const proj = d3.geoMercator().scale(100).translate([0, 0]);
@@ -275,7 +275,7 @@ test('distortion circles: alike on the globe, stretched toward the poles on the 
   expect(sizes.a60 / sizes.a0).toBeCloseTo(1, 2);             // the same circle on the globe
   expect(sizes.h60 / sizes.h0).toBeCloseTo(2, 0);             // twice as tall on the map at 60 degrees: 1 / cos(60)
   expect(sizes.shown).toBe(true);
-  await page.getByLabel('Distortion circles').uncheck();
+  await page.getByLabel("Tissot's indicatrix").uncheck();
   await idle(page);
   expect(await page.evaluate(() => L.tissot.geometry.drawRange.count === 0 && !tissotGlobe.visible)).toBe(true);
 });

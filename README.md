@@ -13,7 +13,7 @@ either one and the wall map redraws. Routes follow along on all three.
   `42.36N 71.06W`), or a click on the globe or map. Each route is drawn as a great circle and a rhumb line, with
   both distances and the rhumb line's extra.
 - **Globe and cylinder:** turn either one, or both. Normal, transverse and oblique presets. Globe and cylinder opacity, set separately.
-- **Distortion circles:** the same small circle all over the globe (Tissot's indicatrix), to see what the map does to each.
+- **Tissot's indicatrix:** the same small circle all over the globe (distortion circles), to see what the map does to each.
 - **Finer coastlines when zoomed in:** Natural Earth's 50m shapes load the first time you get close.
 - **Cylinder along this route** makes a route's great circle the map's straight center line.
 

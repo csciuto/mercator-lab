@@ -88,7 +88,7 @@ flowchart LR
 - **Updating three.js.** Take screenshots of a few views before and after (start, turned with routes and
   circles, transverse, solid globe) and compare them pixel by pixel; the 0.185 update ended within 0.2% of pixels
   of r128, two views identical.
-- **Distortion circles** are `d3.geoCircle`s of 4° radius; on the globe and cylinder they are line segments
+- **Tissot's indicatrix** (distortion circles) is made of `d3.geoCircle`s of 4° radius; on the globe and cylinder they are line segments
   projected like the coastlines, on the wall map they are filled paths.
 - **Detail levels.** `DETAIL` in `app.js` holds the coarse and fine shapes; `checkDetail()` runs each drawn frame,
   fetches the fine set the first time the camera comes within 9 units, and swaps coastlines, globe texture and
