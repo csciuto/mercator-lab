@@ -172,7 +172,7 @@ const MAPN = [96, 32]; // grid of the sheet in θ and h
 
 // ---------------- detail ----------------
 // Shapes come in two sizes. The coarse set (Natural Earth 110m, inlined in world.js) is what the page opens
-// with and what the wall map always uses. Zoomed in on the 3D view its corners show, so the medium set (50m,
+// with and what the wall map uses until it is zoomed in 3× or more. Zoomed in on the 3D view its corners show, so the medium set (50m,
 // world-50m.json, about 240 KB over the wire) is fetched the first time you zoom in and used while you stay
 // close: the coastlines, the land on the globe and the map on the cylinder. It has twelve times the points
 // and costs that much more per redraw, so zooming back out returns to the coarse set.
@@ -195,7 +195,10 @@ function checkDetail() {
   if (cam.dist > DETAIL.FAR) return useDetail("lo");
   if (cam.dist >= DETAIL.NEAR) return;
   if (DETAIL.hi) return useDetail("hi");
-  if (DETAIL.loading || DETAIL.failed) return;
+  loadHi();
+}
+function loadHi() {
+  if (DETAIL.hi || DETAIL.loading || DETAIL.failed) return;
   DETAIL.loading = true;
   fetch("world-50m.json").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(w => {
     DETAIL.hi = {
@@ -203,7 +206,7 @@ function checkDetail() {
       borders: topojson.mesh(w, w.objects.countries, (a, b) => a !== b),
       coast: toVecs(topojson.mesh(w, w.objects.countries, (a, b) => a === b).coordinates),
     };
-    DETAIL.loading = false; checkDetail();
+    DETAIL.loading = false; dirty = true; checkDetail();
   }).catch(() => { DETAIL.loading = false; DETAIL.failed = true; });     // offline or blocked: the coarse set stays
 }
 const mapGeo = (() => {
@@ -569,22 +572,27 @@ const turnCylinder = Ct => animateTo(S.G, Ct, 1000, panes.b);
 // The cylinder unrolled: a flat Mercator map of the globe as it sits in the cylinder now, redrawn as either turns.
 const wm = $("wall");
 let wmKey = "", wmProj = null;
+const wz = { s: 1, x: 0, y: 0 }; // wall zoom: scale, and pan in CSS pixels from the centered map
+let wmBase = null;               // { k, cx, cy } at zoom 1
 function drawWall() {
   const r = wm.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
-  const key = [JSON.stringify(M()), routesVer, S.from ? S.from.c : "", r.width, r.height, S.circles].join("|");
+  const d = wz.s >= 3 && DETAIL.hi ? DETAIL.hi : DETAIL.lo;   // finer coastlines when zoomed in
+  const key = [JSON.stringify(M()), routesVer, S.from ? S.from.c : "", r.width, r.height, S.circles, wz.s, wz.x, wz.y, d === DETAIL.hi].join("|");
   if (key === wmKey || r.width < 10) return;
   wmKey = key;
   wm.width = Math.round(r.width * dpr); wm.height = Math.round(r.height * dpr);
   const g = wm.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.fillStyle = COL.bg; g.fillRect(0, 0, r.width, r.height);
-  const k = 0.94 * Math.min(r.width / (2 * Math.PI), (r.height - 40) / (2 * MAXH));
-  const cx = r.width / 2, cy = 20 + (r.height - 20) / 2, mw = 2 * Math.PI * k, mh = 2 * MAXH * k;
+  const k0 = 0.94 * Math.min(r.width / (2 * Math.PI), (r.height - 40) / (2 * MAXH));
+  wmBase = { k: k0, cx: r.width / 2, cy: 20 + (r.height - 20) / 2 };
+  const k = k0 * wz.s, cx = wmBase.cx + wz.x, cy = wmBase.cy + wz.y, mw = 2 * Math.PI * k, mh = 2 * MAXH * k;
   const box = [[cx - mw / 2, cy - mh / 2], [cx + mw / 2, cy + mh / 2]];
-  wmProj = d3.geoMercator().rotate(euler(M())).scale(k).translate([cx, cy]).precision(0.4).clipExtent(box);
+  const clip = [[Math.max(box[0][0], 0), Math.max(box[0][1], 0)], [Math.min(box[1][0], r.width), Math.min(box[1][1], r.height)]];
+  wmProj = d3.geoMercator().rotate(euler(M())).scale(k).translate([cx, cy]).precision(0.4).clipExtent(clip);
   const path = d3.geoPath(wmProj, g);
   g.fillStyle = "#1f4552"; g.fillRect(box[0][0], box[0][1], mw, mh);
-  g.beginPath(); path(LANDGEO); g.fillStyle = "#d9cfb4"; g.fill();
-  g.beginPath(); path(BORDERS); g.strokeStyle = "rgba(40,40,30,0.45)"; g.lineWidth = 0.6; g.stroke();
+  g.beginPath(); path(d.land); g.fillStyle = "#d9cfb4"; g.fill();
+  g.beginPath(); path(d.borders); g.strokeStyle = "rgba(40,40,30,0.45)"; g.lineWidth = 0.6; g.stroke();
   g.beginPath(); path(d3.geoGraticule().step([15, 15])()); g.strokeStyle = COL.earth; g.globalAlpha = 0.25; g.lineWidth = 0.6; g.stroke(); g.globalAlpha = 1;
   g.beginPath(); path({ type: "LineString", coordinates: parallel(0) }); path({ type: "LineString", coordinates: meridian(0) }); g.strokeStyle = COL.earth; g.lineWidth = 1.2; g.stroke();
   if (S.circles) { g.beginPath(); path(TISSOT); g.fillStyle = COL.a; g.globalAlpha = 0.28; g.fill(); g.globalAlpha = 1; g.strokeStyle = COL.a; g.lineWidth = 1.2; g.stroke(); }
@@ -606,13 +614,92 @@ function drawWall() {
   }
   g.strokeStyle = COL.cyl; g.lineWidth = 1; g.strokeRect(box[0][0] + 0.5, box[0][1] + 0.5, mw - 1, mh - 1);
 }
-// a click on the wall map adds a point, like a click on the globe
+// zoom (wheel, pinch, Zoom out) and pan (drag) the wall map; the map always fills at least its zoom-1 frame
+function wallZoom(s, x, y) {
+  if (!wmBase) return;
+  s = Math.max(1, Math.min(16, s));
+  const mx = Math.PI * wmBase.k * (s - 1), my = MAXH * wmBase.k * (s - 1);
+  if (s >= 3) loadHi();
+  wz.s = s; wz.x = Math.max(-mx, Math.min(mx, x)); wz.y = Math.max(-my, Math.min(my, y));
+  $("wallReset").hidden = s === 1;
+  dirty = true;
+}
+// zoom to s keeping the map point under (px, py) in place
+function wallZoomAt(s, px, py) {
+  if (!wmBase) return;
+  s = Math.max(1, Math.min(16, s));
+  const f = s / wz.s, ox = wmBase.cx + wz.x, oy = wmBase.cy + wz.y;
+  wallZoom(s, px - (px - ox) * f - wmBase.cx, py - (py - oy) * f - wmBase.cy);
+}
+const wallAt = e => { const r = wm.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+wm.addEventListener("wheel", e => {
+  e.preventDefault();
+  const [x, y] = wallAt(e);
+  wallZoomAt(wz.s * Math.exp(-e.deltaY * 0.002), x, y);
+}, { passive: false });
+const wPtrs = new Map();
+let wDrag = null;
+wm.addEventListener("pointerdown", e => {
+  wm.setPointerCapture(e.pointerId);
+  wPtrs.set(e.pointerId, wallAt(e));
+  wDrag = { moved: wDrag ? wDrag.moved : false, start: wallAt(e), pinch: null };
+  if (wPtrs.size === 2) {
+    const [a, b] = [...wPtrs.values()];
+    wDrag.pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: wz.s };
+  }
+});
+wm.addEventListener("pointermove", e => {
+  if (!wPtrs.has(e.pointerId) || !wDrag) return;
+  const prev = wPtrs.get(e.pointerId), p = wallAt(e);
+  wPtrs.set(e.pointerId, p);
+  if (wDrag.pinch && wPtrs.size === 2) {
+    const [a, b] = [...wPtrs.values()];
+    wDrag.moved = true;
+    wallZoomAt(wDrag.pinch.s * Math.hypot(a[0] - b[0], a[1] - b[1]) / Math.max(1, wDrag.pinch.d), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+    return;
+  }
+  if (!wDrag.moved && Math.hypot(p[0] - wDrag.start[0], p[1] - wDrag.start[1]) < 5) return;
+  wDrag.moved = true;
+  if (wz.s > 1) { wm.style.cursor = "grabbing"; wallZoom(wz.s, wz.x + p[0] - prev[0], wz.y + p[1] - prev[1]); }
+});
+const wallUp = e => {
+  wPtrs.delete(e.pointerId);
+  if (!wPtrs.size) wm.style.cursor = "";
+  if (wDrag) wDrag.pinch = null;
+};
+wm.addEventListener("pointerup", wallUp);
+wm.addEventListener("pointercancel", e => { wallUp(e); wDrag = null; });
+$("wallReset").addEventListener("click", () => wallZoom(1, 0, 0));
+// a click on the wall map adds a point, like a click on the globe (not after a drag or pinch)
 wm.addEventListener("click", e => {
-  if (!wmProj) return;
+  const dragged = wDrag && wDrag.moved;
+  if (!wPtrs.size) wDrag = null;
+  if (dragged || !wmProj) return;
   const r = wm.getBoundingClientRect(), c = wmProj.invert([e.clientX - r.left, e.clientY - r.top]);
   if (c && isFinite(c[0]) && Math.abs(c[1]) <= MAXLAT) pickPoint(c, clickName(c));
 });
 new ResizeObserver(() => { wmKey = ""; dirty = true; }).observe(wm);
+
+// ---------------- panel tabs ----------------
+const tabs = [...document.querySelectorAll('#side [role="tab"]')];
+function showTab(t, focus) {
+  for (const b of tabs) {
+    const on = b === t;
+    b.setAttribute("aria-selected", String(on));
+    b.tabIndex = on ? 0 : -1;
+    $(b.getAttribute("aria-controls")).hidden = !on;
+  }
+  if (focus) t.focus();
+}
+for (const b of tabs) {
+  b.addEventListener("click", () => showTab(b));
+  b.addEventListener("keydown", e => {
+    const i = tabs.indexOf(b), n = tabs.length;
+    const j = { ArrowRight: i + 1, ArrowLeft: i - 1 + n, Home: 0, End: n - 1 }[e.key];
+    if (j === undefined) return;
+    e.preventDefault(); showTab(tabs[j % n], true);
+  });
+}
 
 // ---------------- input ----------------
 const HINT1 = "Drag the globe or cylinder to turn it · Shift-drag: both · Right-drag: look around · Click: add a point";
@@ -770,6 +857,6 @@ window.addEventListener("DOMContentLoaded", () => requestAnimationFrame(frame));
 // hooks for tests
 window.__lab = { S, M, globe: () => ({ opacity: globeMat.opacity, depthWrite: globeMat.depthWrite }),
   screenOf: p => { scene.updateMatrixWorld(); const v = new THREE.Vector3(...p).project(camera), r = cv.getBoundingClientRect(); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height]; },
-  idle: () => running === 0 && !dirty, detail: () => DETAIL.now, animateTo, panes, alongRoute, wall: () => wmProj,
+  idle: () => running === 0 && !dirty, detail: () => DETAIL.now, animateTo, panes, alongRoute, wall: () => wmProj, wallZoom: () => ({ ...wz }),
   map: () => ({ visible: mapMesh.visible, opacity: mapMat.opacity }),
   counts: () => Object.assign(Object.fromEntries(Object.entries(L).map(([k, o]) => [k, o.geometry.drawRange.count])), { routes: routeGroup.children.length }) };

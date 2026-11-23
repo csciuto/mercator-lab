@@ -81,7 +81,8 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 0
 #bench { display: grid; grid-template-columns: 1fr 1fr; }
 #live { position: relative; min-width: 0; min-height: 0; }
 #wallBox { position: relative; min-width: 0; min-height: 0; border-left: 1px solid var(--line); }
-#wallBox canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+#wallBox canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+#wallBox .zoom-reset { position: absolute; right: 8px; bottom: 8px; }
 #wallLabel { position: absolute; left: 14px; top: 12px; pointer-events: none; }
 #routes .along { margin-top: 4px; font: 500 11.5px var(--f-body); color: var(--cyl); background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 2px 7px; cursor: pointer; }
 #routes .along:hover { border-color: var(--cyl); }
@@ -101,7 +102,14 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 0
 kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; color: var(--ink); }
 #routes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 #routes li { display: grid; grid-template-columns: 4px 1fr auto; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--line); }
-#routes { max-height: 140px; overflow-y: auto; }
+#routeSec { flex: 1; min-height: 0; }
+#routes { flex: 1; min-height: 0; overflow-y: auto; }
+.tabs { display: flex; border-bottom: 1px solid var(--line); }
+.tabs button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 11px 6px 9px; background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font: 600 10.5px var(--f-body); letter-spacing: .09em; text-transform: uppercase; cursor: pointer; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+.tabs .dot { width: 8px; height: 8px; border-radius: 50%; }
+[hidden] { display: none !important; }
 #routes .mbar { border-radius: 2px; background: linear-gradient(var(--gcl) 50%, var(--rhl) 50%); }
 #routes li.empty { display: block; border: 0; color: var(--muted); }
 #routes .meta { min-width: 0; font: 12px/1.5 var(--f-data); font-variant-numeric: tabular-nums; }
@@ -179,12 +187,17 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
       <div id="wallBox">
         <span class="lbl" id="wallLabel">Wall map</span>
         <canvas id="wall" aria-label="Wall map"></canvas>
+        <button class="btn zoom-reset" id="wallReset" hidden>Zoom out</button>
       </div>
     </section>
 
     <aside id="side">
-      <div class="sec" id="routeSec">
-        <h2><span class="dot" style="background:var(--gcl)"></span>Routes</h2>
+      <div class="tabs" role="tablist" aria-label="Panel">
+        <button role="tab" id="tab-routes" aria-controls="routeSec" aria-selected="true"><span class="dot" style="background:var(--gcl)"></span>Routes</button>
+        <button role="tab" id="tab-globe" aria-controls="globeSec" aria-selected="false" tabindex="-1"><span class="dot" style="background:var(--earth)"></span>Globe</button>
+        <button role="tab" id="tab-cyl" aria-controls="cylSec" aria-selected="false" tabindex="-1"><span class="dot" style="background:var(--cyl)"></span>Cylinder</button>
+      </div>
+      <div class="sec" id="routeSec" role="tabpanel" aria-labelledby="tab-routes">
         <div class="pair">
         <div class="search">
           <input id="from" type="search" placeholder="From: city, lat lon" autocomplete="off" spellcheck="false" aria-label="From" aria-controls="from-results" aria-autocomplete="list">
@@ -199,8 +212,7 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
         <div class="row"><button class="btn" id="clearRoutes">Clear routes</button></div>
       </div>
 
-      <div class="sec" id="globeSec">
-        <h2><span class="dot" style="background:var(--earth)"></span>Globe</h2>
+      <div class="sec" id="globeSec" role="tabpanel" aria-labelledby="tab-globe" hidden>
         <div class="slider"><label for="g0">Spin</label><input type="range" id="g0" min="-180" max="180" step="0.5" value="0"><output id="g0o">0°</output></div>
         <div class="slider"><label for="g1">Tilt</label><input type="range" id="g1" min="-90" max="90" step="0.5" value="0"><output id="g1o">0°</output></div>
         <div class="slider"><label for="g2">Roll</label><input type="range" id="g2" min="-180" max="180" step="0.5" value="0"><output id="g2o">0°</output></div>
@@ -208,8 +220,7 @@ kbd { font: 500 11px var(--f-data); border: 1px solid var(--line); border-radius
         <label class="check"><input type="checkbox" id="circles"> Distortion circles <span class="sw circ" aria-hidden="true"></span></label>
       </div>
 
-      <div class="sec" id="cylSec">
-        <h2><span class="dot" style="background:var(--cyl)"></span>Cylinder</h2>
+      <div class="sec" id="cylSec" role="tabpanel" aria-labelledby="tab-cyl" hidden>
         <span class="seg" role="group" aria-label="Cylinder presets">
           <button id="pr-normal">Normal</button>
           <button id="pr-trans">Transverse</button>

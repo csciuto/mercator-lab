@@ -13,7 +13,7 @@ Commit and push freely once tests pass.
 - One view, Mercator only. The user replaced the Globe → Project → Unroll steps and Freeze with this side-by-side
   layout: no steps, the cylinder always there (its opacity slider can hide it), the wall map always beside it.
   Routes always drawn both ways; Reset keeps routes. Add to this view rather than starting a second one.
-- The side panel fits 1280 × 800 without scrolling (tested). Keep it that way when adding controls.
+- The side panel is tabs (Routes, Globe, Cylinder); each fits 1280 × 800 without scrolling and Routes shows 4+ routes (tested). Keep it that way when adding controls.
 - Routes travel in the address (`#routes=…`; old `#lines=` still read); the app rewrites it whenever they change.
 - Keep `npm run test:all` passing: unit tests (`npm test`), then browser tests at desktop and phone size with axe accessibility checks (`npm run test:e2e`). Tag desktop-only browser tests `@desktop`.
 - Visible text: labels, not sentences. Explanations go on `help.html`.

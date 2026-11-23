@@ -7,6 +7,7 @@ const PREVIEW = 'preview.png';
 const READY = '#routes li';
 const ROUTE = '#routes li:not(.empty)';
 const BOS_ROM = '#routes=-71.06,42.36,12.5,41.9';
+const tab = (page, name) => page.getByRole('tab', { name }).click();
 const idle = (page) => page.waitForFunction(() => window.__lab && window.__lab.idle());
 const counts = (page) => page.evaluate(() => window.__lab.counts());
 // where an Earth point lands on the wall map (canvas pixels)
@@ -42,12 +43,46 @@ test('opens on the globe in its cylinder, with the wall map beside it @desktop',
   }
 });
 
-test('the panel fits a 1280 × 800 screen without scrolling @desktop', async ({ page }) => {
+test('the panel fits a 1280 × 800 screen without scrolling, with room for several routes @desktop', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto(APP + BOS_ROM + ';-0.13,51.51,139.69,35.69');
-  await expect(page.locator(ROUTE)).toHaveCount(2);
-  const [sh, ch] = await page.locator('#side').evaluate((el) => [el.scrollHeight, el.clientHeight]);
-  expect(sh).toBeLessThanOrEqual(ch);
+  await page.goto(APP + BOS_ROM + ';-0.13,51.51,139.69,35.69;2.35,48.86,-43.17,-22.91;151.21,-33.87,-118.24,34.05;4.35,50.85,-21.9,64.15');
+  await expect(page.locator(ROUTE)).toHaveCount(5);
+  for (const name of ['Routes', 'Globe', 'Cylinder']) {
+    await tab(page, name);
+    const [sh, ch] = await page.locator('#side').evaluate((el) => [el.scrollHeight, el.clientHeight]);
+    expect(sh, name).toBeLessThanOrEqual(ch);
+  }
+  await tab(page, 'Routes');
+  const list = await page.locator('#routes').boundingBox();
+  let shown = 0;
+  for (const li of await page.locator(ROUTE).all()) { const b = await li.boundingBox(); if (b.y + b.height <= list.y + list.height + 1) shown++; }
+  expect(shown).toBeGreaterThanOrEqual(4);
+});
+
+test('the wall map zooms and pans; a drag does not add a point @desktop', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(APP + BOS_ROM);
+  await idle(page);
+  const box = await page.locator('#wall').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  const span = async () => { const [a, b] = [await onWall(page, [-71.06, 42.36]), await onWall(page, [12.5, 41.9])]; return b[0] - a[0]; };
+  const before = await span();
+  const boston = await onWall(page, [-71.06, 42.36]);
+  await page.mouse.move(box.x + boston[0], box.y + boston[1]);
+  for (let i = 0; i < 5; i++) await page.mouse.wheel(0, -200);
+  await idle(page);
+  expect(await span()).toBeGreaterThan(before * 3);
+  const still = await onWall(page, [-71.06, 42.36]);            // the point under the pointer stays put
+  expect(Math.hypot(still[0] - boston[0], still[1] - boston[1])).toBeLessThan(8);   // the mouse lands on whole pixels
+  await page.mouse.move(cx, cy); await page.mouse.down();
+  await page.mouse.move(cx - 60, cy, { steps: 5 }); await page.mouse.up();
+  await idle(page);
+  const moved = await onWall(page, [-71.06, 42.36]);
+  expect(moved[0]).toBeCloseTo(still[0] - 60, 0);
+  await expect(page.locator('#from')).toHaveValue('');           // the drag added no point
+  await page.locator('#wallReset').click(); await idle(page);
+  expect(await span()).toBeCloseTo(before, 0);
+  await expect(page.locator('#wallReset')).toBeHidden();
 });
 
 test('From shows its name right away; To makes a route with both lines and both distances', async ({ page }) => {
@@ -113,11 +148,14 @@ test('× removes one route; Clear routes removes them all', async ({ page }) => 
 test('Globe and Cylinder opacity are separate; at 0 the fill goes and the outlines stay', async ({ page }) => {
   await page.goto(APP + BOS_ROM);
   await idle(page);
+  await tab(page, 'Cylinder');
   await page.locator('#cylOpacity').fill('30'); await idle(page);
   expect((await page.evaluate(() => window.__lab.map())).opacity).toBeCloseTo(0.3);
+  await tab(page, 'Globe');
   await page.locator('#opacity').fill('100'); await idle(page);
   expect((await page.evaluate(() => window.__lab.globe())).opacity).toBeCloseTo(1);
   expect((await page.evaluate(() => window.__lab.map())).opacity).toBeCloseTo(0.3);
+  await tab(page, 'Cylinder');
   await page.locator('#cylOpacity').fill('0'); await idle(page);
   expect((await page.evaluate(() => window.__lab.map())).visible).toBe(false);
   const c = await counts(page);
@@ -130,10 +168,12 @@ test('the wall map follows the cylinder: Transverse redraws it', async ({ page }
   await page.goto(APP + BOS_ROM);
   await idle(page);
   const before = await onWall(page, [-71.06, 42.36]);
+  await tab(page, 'Cylinder');
   await page.locator('#pr-trans').click(); await idle(page);
   await expect(page.locator('#touch')).toHaveText('Transverse · touches the 0° meridian');
   const after = await onWall(page, [-71.06, 42.36]);
   expect(Math.hypot(after[0] - before[0], after[1] - before[1])).toBeGreaterThan(20);
+  await tab(page, 'Globe');
   await page.locator('#g0').fill('40'); await idle(page);   // turning the globe redraws it too
   const turned = await onWall(page, [-71.06, 42.36]);
   expect(Math.hypot(turned[0] - after[0], turned[1] - after[1])).toBeGreaterThan(20);
@@ -150,7 +190,9 @@ test('a click on the wall map adds a point @desktop', async ({ page }) => {
 
 test('Reset puts the globe and cylinder back and keeps routes', async ({ page }) => {
   await page.goto(APP + BOS_ROM);
+  await tab(page, 'Globe');
   await page.locator('#g0').fill('40');
+  await tab(page, 'Cylinder');
   await page.locator('#pr-trans').click(); await idle(page);
   await page.locator('#cylOpacity').fill('20');
   await page.locator('#reset').click(); await idle(page);
@@ -194,20 +236,25 @@ test('the address keeps the globe, the cylinder and the circles, and a link rest
   await page.goto(APP);
   await expect(page.locator(READY).first()).toBeVisible();
   expect(new URL(page.url()).hash).toBe('');
+  await tab(page, 'Globe');
   await page.locator('#g0').fill('40');                       // spin the globe
-  await page.locator('#pr-trans').click();                    // transverse cylinder
   await page.getByLabel('Distortion circles').check();
+  await tab(page, 'Cylinder');
+  await page.locator('#pr-trans').click();                    // transverse cylinder
   await expect.poll(() => new URL(page.url()).hash, { timeout: 8000 }).toBe('#g=40,0,0&c=0,0,-90&circles');
 
   const other = await context.newPage();
   await other.goto(page.url());
   await expect(other.locator(READY).first()).toBeVisible();
+  await tab(other, 'Globe');
   await expect(other.locator('#g0o')).toHaveText('40.0°');
-  await expect(other.locator('#c2o')).toHaveText('-90.0°');
   await expect(other.getByLabel('Distortion circles')).toBeChecked();
+  await tab(other, 'Cylinder');
+  await expect(other.locator('#c2o')).toHaveText('-90.0°');
   // Reset puts the globe and cylinder back; the address follows
   await other.locator('#reset').click();
   await expect.poll(() => new URL(other.url()).hash, { timeout: 8000 }).toBe('#circles');
+  await tab(other, 'Globe');
   await other.getByLabel('Distortion circles').uncheck();
   await expect.poll(() => new URL(other.url()).hash, { timeout: 8000 }).toBe('');
 });
@@ -215,6 +262,7 @@ test('the address keeps the globe, the cylinder and the circles, and a link rest
 test('distortion circles: alike on the globe, stretched toward the poles on the map @desktop', async ({ page }) => {
   await page.goto(APP);
   await expect(page.locator(READY).first()).toBeVisible();
+  await tab(page, 'Globe');
   await page.getByLabel('Distortion circles').check();
   await idle(page);
   const sizes = await page.evaluate(() => {
