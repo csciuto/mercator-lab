@@ -61,3 +61,27 @@ test('labels: nearest within radius, overlapping boxes dropped', () => {
 test('distance label shows miles and kilometers', () => {
   assert.equal(G.distLabel(1000), '621 mi · 1,000 km');
 });
+
+// Reference distances from GeographicLib 2.1 (Karney), an independent library, on the app's sphere
+// (R = 6371.0088 km). Great circle: Geodesic(R, 0).Inverse. Rhumb: the constant-bearing path measured
+// in 20,000 pieces with the same library. Both must match to within a meter, either direction.
+const REF = [
+  ['Boston → Rome', [-71.06, 42.36], [12.5, 41.9], 6585.550, 6890.918],
+  ['London → Tokyo', [-0.13, 51.51], [139.69, 35.69], 9558.448, 11295.282],
+  ['Paris → Rio', [2.35, 48.86], [-43.17, -22.91], 9167.779, 9190.352],
+  ['Sydney → Los Angeles', [151.21, -33.87], [-118.24, 34.05], 12073.712, 12105.368],
+  ['Brussels → Reykjavík', [4.35, 50.85], [-21.9, 64.15], 2126.919, 2140.308],
+  ['New York → Moscow', [-74.01, 40.71], [37.62, 55.76], 7510.549, 8353.023],
+  ['along the equator', [0, 0], [90, 0], 10007.557, 10007.557],
+  ['80°N → Anchorage', [10, 80], [-149.9, 61.22], 4260.086, 5805.324],
+  ['Cape Town → Perth', [18.42, -33.92], [115.86, -31.95], 8697.859, 9095.372],
+  ['Quito → Singapore (nearly antipodal)', [-78.47, -0.18], [103.82, 1.35], 19729.192, 19759.593],
+];
+test('distances match an independent reference (GeographicLib) to the meter', () => {
+  for (const [name, a, b, gc, rh] of REF) {
+    for (const [p, q] of [[a, b], [b, a]]) {
+      near(G.gcDist(p, q), gc, 0.001, `${name} great circle`);
+      near(G.rhumb(p, q).d, rh, 0.001, `${name} rhumb`);
+    }
+  }
+});

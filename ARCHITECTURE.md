@@ -88,6 +88,9 @@ flowchart LR
 - **Updating three.js.** Take screenshots of a few views before and after (start, turned with routes and
   circles, transverse, solid globe) and compare them pixel by pixel; the 0.185 update ended within 0.2% of pixels
   of r128, two views identical.
+- **Distances** are on a sphere of the mean Earth radius (6,371.0088 km): haversine for the great circle, the
+  standard Mercator-ψ formula for the rhumb line. `tests/geo.test.js` pins ten routes to GeographicLib values on that
+  sphere, to the meter. The real (WGS84) Earth differs by 0.1–0.4%; the app doesn't model the ellipsoid.
 - **Tissot's indicatrix** (distortion circles) is made of `d3.geoCircle`s of 4° radius; on the globe and cylinder they are line segments
   projected like the coastlines, on the wall map they are filled paths.
 - **Detail levels.** `DETAIL` in `app.js` holds the coarse and fine shapes; `checkDetail()` runs each drawn frame,
